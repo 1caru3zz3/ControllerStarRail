@@ -37,13 +37,31 @@ ls -l /dev/uinput
 | `redmi` | 设备名 `REDMI Gaming Controller` / `045e:0b13` 一类 | REDMI 游戏手柄（PC/Xbox 模式，本项目主要目标） |
 | `xbox` | 标准 Xbox 按键/轴布局 | Xbox 360 / One / Series、雷神 G35（对照组，上报 `Xbox Wireless Controller`） |
 | `ps` | DualShock/DualSense 布局 | DualShock 4、DualSense |
-| `android` | 通用 Android 游戏手柄布局 | 常见 Android 认证手柄 |
+| `android` | 扳机在 `ABS_GAS` / `ABS_BRAKE`，右摇杆在 `ABS_Z` / `ABS_RZ` | 部分国产手柄的 Android 布局 |
 | `switch` | Switch 布局（按键序与 Xbox 不同） | Switch Pro 控制器 |
 | `generic` | 兜底：仅做基本按键/轴转发 | 未列入的通用手柄 |
 
 > 雷神 G35 作为对照组可直接被游戏识别，常用于验证虚拟设备路径是否正确工作。Xbox 系手柄本身已在白名单内，一般无需本项目转发。
 
-## 4. 提交新手柄的 getevent 信息
+`--list` 输出中的 `profile=` 列是 `auto` 模式会选择的 Profile，`axes=` 列列出设备支持的轴，`triggers=` 列区分模拟/数字扳机，可用于快速诊断。厂商名（如 GameSir / BETOP / Flydigi）不会被硬套某个 Profile——同品牌不同型号的轴布局差异很大，一律按实际轴能力推断。
+
+## 4. Type-C 有线手柄（以盖世小鸡 X5 Lite 为例）
+
+桥**不区分物理连接方式**：只要手柄在系统中生成标准的 `/dev/input/event*` 游戏手柄节点，就能被 `--list` 发现并转发；虚拟设备始终是 USB 的 `Microsoft X-Box 360 pad`（`045e:028e`），游戏侧与蓝牙手柄完全一致。因此有线 USB 手柄、2.4G 接收器手柄、蓝牙手柄走的是同一条路径。
+
+| 条件 | 说明 |
+| --- | --- |
+| 模式 | 必须处于 **Android 原生 HID 直连模式**（X5 Lite 指示灯为深蓝）。浅蓝的 G-Touch / V-Touch 是触屏映射模式，产生的是触摸事件而非标准手柄事件，本项目无法转发；红色为 Switch 模式 |
+| OTG | 部分小米 / HyperOS 设备需在设置中开启 OTG；手柄由设备 Type-C 口供电，无内置电池，支持充电透传 |
+| 节点 | `--list` 能看到该设备且能读到 `EV_KEY` 与摇杆轴；若系统只生成触屏或厂商私有节点则不支持 |
+| 物理 | X5 Lite 夹持范围 105–213 mm、Type-C 插头可上下微调；8.8 英寸级平板接近上限，需实测能否夹稳、接口是否对齐、有无保护壳干涉 |
+| 扳机 | X5 Lite 为数字式薄膜扳机，`--list` 会显示 `triggers=digital`；若游戏读取模拟轴，LT/RT 可能表现为普通按键或无效，需按 `getevent` 结果定制映射 |
+
+操作步骤：插好并开启 OTG → 打开 App →「刷新设备列表」→ 选中该手柄 → Profile 先用 `auto`（可参考 `--list` 的 `profile=` 建议）→ 启动桥 → 进游戏设置检查「切换控制模式」。若右摇杆/扳机错乱，依次尝试 `xbox`、`android`、`generic`；若扳机完全无效，把 `--list` 与 `getevent -pl` 输出提交 issue，可补充「按键→轴」映射（当前 `--config` 仅支持轴→轴、键→键）。
+
+> 若手柄本身已被游戏直接识别（上报名称含 Xbox 等白名单关键字），无需启动本桥；否则会同时存在物理与虚拟两个手柄。
+
+## 5. 提交新手柄的 getevent 信息
 
 若某手柄在 `auto` 下按键错乱或未被发现，请附以下信息提交 issue（用占位符，勿贴真实序列号 / 个人信息）：
 
@@ -61,7 +79,7 @@ getevent -p  <event 节点>      # 各轴 min/max/fuzz/flat/resolution
 
 维护者据此补充内置 Profile 或给出 `--config` 映射。提交前请先脱敏，勿包含配对码、设备地址、账号等。
 
-## 5. 已知限制
+## 6. 已知限制
 
 - 未 root 且 Shizuku 未自动启动时，设备重启后仍需手动重启一次 Shizuku；本项目不宣称 100% 免 Shizuku。
 - 震动、LED、陀螺仪等反向/扩展能力不转发，仅转发标准按键与轴。
@@ -70,6 +88,7 @@ getevent -p  <event 节点>      # 各轴 min/max/fuzz/flat/resolution
 - 游戏更新可能调整 InControl 白名单；若「切换控制模式」消失，请核对虚拟设备仍为 `045e:028e`。
 - 小米游戏中心虚拟按键浮层与触控映射可能干扰操作，可用 `am force-stop com.xiaomi.gamecenter` 关闭。
 - 蓝牙别名修改、小米游戏中心识别均无效（已验证并放弃）。
+- 数字扳机手柄的 LT/RT 可能只有 0 / 满值两态；`--config` 目前不支持把按键映射成轴事件。
 
 ## 相关文档
 

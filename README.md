@@ -92,6 +92,7 @@ ANDROID_NDK_HOME=/path/to/ndk bash scripts/build-native.sh   # 可选：重建�
 - 目标设备：Redmi K Pad；目标游戏：《崩坏：星穹铁道》。
 - 主要适配：REDMI 游戏手柄（PC/Xbox 模式）。
 - 兼容：Xbox 360 / One / Series、雷神 G35（对照组）、DualShock / DualSense、Switch Pro、通用手柄。
+- Type-C 有线手柄（如盖世小鸡 X5 Lite）：需切到 Android 原生 HID 直连模式并开启 OTG，详见 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)。
 - ABI：`arm64-v8a` / `armeabi-v7a` / `x86_64`。详见 [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)。
 
 ## 常见问题

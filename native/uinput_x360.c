@@ -219,9 +219,11 @@ static const char *profile_by_identity(const device_info_t *dev) {
         {"Xbox", "xbox"}, {"X-Box", "xbox"}, {"THUNDEROBOT", "xbox"},
         {"DualSense", "ps"}, {"DualShock", "ps"}, {"Wireless Controller", "ps"},
         {"Switch Pro", "switch"}, {"Pro Controller", "switch"},
-        {"GameSir", "android"}, {"Gamesir", "android"}, {"BETOP", "android"},
-        {"Flydigi", "android"}, {"shanwan", "android"}
     };
+    /* Note: generic vendors such as GameSir / BETOP / Flydigi are deliberately
+     * absent here. Their product lines mix several axis layouts, so forcing a
+     * single profile by name is worse than letting profile_by_layout() decide.
+     * Only add identity rules for devices with a known, fixed layout. */
     size_t i;
     for (i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i) {
         if (dev->vendor == ids[i].vendor && dev->product == ids[i].product) return ids[i].profile;
@@ -316,13 +318,45 @@ static int scan_devices(device_info_t *list, int capacity) {
     return count;
 }
 
+static void describe_axes(const device_info_t *dev, char *out, size_t size) {
+    struct { int code; const char *label; } axes[] = {
+        {ABS_X, "X"}, {ABS_Y, "Y"}, {ABS_RX, "RX"}, {ABS_RY, "RY"},
+        {ABS_Z, "Z"}, {ABS_RZ, "RZ"}, {ABS_GAS, "GAS"}, {ABS_BRAKE, "BRAKE"},
+        {ABS_HAT0X, "HX"}, {ABS_HAT0Y, "HY"}
+    };
+    size_t i, used = 0;
+    if (size == 0) return;
+    out[0] = '\0';
+    for (i = 0; i < sizeof(axes) / sizeof(axes[0]); ++i) {
+        int written;
+        if (!has_bit(dev->abs_bits, ABS_BITS, axes[i].code)) continue;
+        written = snprintf(out + used, size - used, "%s%s",
+                           used ? "," : "", axes[i].label);
+        if (written < 0 || (size_t)written >= size - used) break;
+        used += (size_t)written;
+    }
+}
+
+static int has_analog_trigger(const device_info_t *dev) {
+    return has_bit(dev->abs_bits, ABS_BITS, ABS_Z) ||
+           has_bit(dev->abs_bits, ABS_BITS, ABS_RZ) ||
+           has_bit(dev->abs_bits, ABS_BITS, ABS_GAS) ||
+           has_bit(dev->abs_bits, ABS_BITS, ABS_BRAKE);
+}
+
 static void print_devices(void) {
     device_info_t list[MAX_EVENT_DEVICES];
     int count = scan_devices(list, MAX_EVENT_DEVICES), i;
     for (i = 0; i < count; ++i) {
-        printf("%s\t%s\t%04x:%04x\tbus=%u\that=%d\n",
+        char axes[160];
+        const char *identity = profile_by_identity(&list[i]);
+        const char *picked = identity ? identity : profile_by_layout(&list[i]);
+        describe_axes(&list[i], axes, sizeof(axes));
+        printf("%s\t%s\t%04x:%04x\tbus=%u\that=%d\tprofile=%s\ttriggers=%s\taxes=%s\n",
                list[i].path, list[i].name, list[i].vendor, list[i].product,
-               list[i].bus, list[i].has_hat);
+               list[i].bus, list[i].has_hat, picked,
+               has_analog_trigger(&list[i]) ? "analog" : "digital",
+               axes[0] ? axes : "none");
     }
     if (count == 0) printf("# no gamepad found\n");
 }
