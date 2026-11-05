@@ -4,7 +4,7 @@
 
 | 项目 | 要求 |
 | --- | --- |
-| 目标设备 | Redmi K Pad（其它设备满足条件亦可尝试） |
+| 目标设备 | Android 手机 / 平板（满足下列条件的设备均可尝试） |
 | 目标游戏 | 《崩坏：星穹铁道》`com.miHoYo.hkrpg` |
 | Android 版本 | 建议 Android 10 及以上；自启动例外条件需 Android 13+ |
 | CPU ABI | `arm64-v8a` / `armeabi-v7a` / `x86_64`，按 `Build.SUPPORTED_ABIS` 选二进制 |
@@ -35,13 +35,13 @@ ls -l /dev/uinput
 | --- | --- | --- |
 | `auto` | 默认；按设备名 / VID:PID 或轴布局自动判定 | 下列全部设备 |
 | `redmi` | 设备名 `REDMI Gaming Controller` / `045e:0b13` 一类 | REDMI 游戏手柄（PC/Xbox 模式，本项目主要目标） |
-| `xbox` | 标准 Xbox 按键/轴布局 | Xbox 360 / One / Series、雷神 G35（对照组，上报 `Xbox Wireless Controller`） |
+| `xbox` | 标准 Xbox 按键/轴布局 | Xbox 360 / One / Series、其它上报 `Xbox Wireless Controller` 的标准手柄 |
 | `ps` | DualShock/DualSense 布局 | DualShock 4、DualSense |
 | `android` | 扳机在 `ABS_GAS` / `ABS_BRAKE`，右摇杆在 `ABS_Z` / `ABS_RZ` | 部分国产手柄的 Android 布局 |
 | `switch` | Switch 布局（按键序与 Xbox 不同） | Switch Pro 控制器 |
 | `generic` | 兜底：仅做基本按键/轴转发 | 未列入的通用手柄 |
 
-> 雷神 G35 作为对照组可直接被游戏识别，常用于验证虚拟设备路径是否正确工作。Xbox 系手柄本身已在白名单内，一般无需本项目转发。
+> 上报为 `Xbox Wireless Controller` 等白名单名称的手柄通常能被游戏直接识别，无需本项目转发；这类设备也适合作为验证虚拟设备路径的对照。
 
 `--list` 输出中的 `profile=` 列是 `auto` 模式会选择的 Profile，`axes=` 列列出设备支持的轴，`triggers=` 列区分模拟/数字扳机，可用于快速诊断。厂商名（如 GameSir / BETOP / Flydigi）不会被硬套某个 Profile——同品牌不同型号的轴布局差异很大，一律按实际轴能力推断。
 
