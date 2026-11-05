@@ -6,7 +6,7 @@
 | --- | --- |
 | 目标设备 | Android 手机 / 平板（满足下列条件的设备均可尝试） |
 | 目标游戏 | 《崩坏：星穹铁道》`com.miHoYo.hkrpg` |
-| Android 版本 | 建议 Android 10 及以上；自启动例外条件需 Android 13+ |
+| Android 版本 | 已在 Android 15 类设备验证；静态二进制以 API 34 sysroot 编译，更低版本未回归；自启动例外条件需 Android 13+ |
 | CPU ABI | `arm64-v8a` / `armeabi-v7a` / `x86_64`，按 `Build.SUPPORTED_ABIS` 选二进制 |
 | Shizuku | 13.6.0+（自动启动例外）；更旧版本可用但需手动启动 |
 | 内核 `uinput` | 必须存在且可写 `/dev/uinput`；多数官方内核默认启用，个别定制内核可能裁剪 |
@@ -44,6 +44,8 @@ ls -l /dev/uinput
 > 上报为 `Xbox Wireless Controller` 等白名单名称的手柄通常能被游戏直接识别，无需本项目转发；这类设备也适合作为验证虚拟设备路径的对照。
 
 `--list` 输出中的 `profile=` 列是 `auto` 模式会选择的 Profile，`axes=` 列列出设备支持的轴，`triggers=` 列区分模拟/数字扳机，可用于快速诊断。厂商名（如 GameSir / BETOP / Flydigi）不会被硬套某个 Profile——同品牌不同型号的轴布局差异很大，一律按实际轴能力推断。
+
+扫描会排除带 `INPUT_PROP_DIRECT` 属性的设备（触摸屏、手写笔、数位板）以及名称含 Pen / Stylus / Capacitive 的输入设备；这类设备常带 `BTN_JOYSTICK` 与 X/Y 轴，早期版本会误判成手柄并错误地 `EVIOCGRAB` 独占，导致触控笔失灵。
 
 ## 4. Type-C 有线手柄（以盖世小鸡 X5 Lite 为例）
 
@@ -85,6 +87,7 @@ getevent -p  <event 节点>      # 各轴 min/max/fuzz/flat/resolution
 - 震动、LED、陀螺仪等反向/扩展能力不转发，仅转发标准按键与轴。
 - `EVIOCGRAB` 独占后物理手柄不再向系统派发原始事件；调试用 `--no-grab` 会导致双重输入。
 - 个别厂商内核若裁剪 `uinput` 或限制 `/dev/uinput` 写权限，本方案不可用。
+- native 为静态链接并以 API 34 sysroot 编译（ARM64 Bionic 要求 `PT_TLS` 至少 64 字节对齐，低版本 sysroot 会直接被 loader 拒绝）；低于 Android 14 的系统未回归验证。
 - 游戏更新可能调整 InControl 白名单；若「切换控制模式」消失，请核对虚拟设备仍为 `045e:028e`。
 - 小米游戏中心虚拟按键浮层与触控映射可能干扰操作，可用 `am force-stop com.xiaomi.gamecenter` 关闭。
 - 蓝牙别名修改、小米游戏中心识别均无效（已验证并放弃）。
