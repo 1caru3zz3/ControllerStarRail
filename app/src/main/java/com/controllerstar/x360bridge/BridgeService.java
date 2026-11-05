@@ -98,22 +98,20 @@ public class BridgeService extends Service {
     private void restoreAfterBoot(BridgeManager manager) throws IOException {
         for (int attempt = 0; attempt < RETRY_COUNT; ++attempt) {
             manager.connect();
-            if (manager.isShizukuReady() && manager.isServiceConnected()) {
-                BridgeManager.Status status = readStatus(manager);
-                if (!status.running()) {
-                    String start = manager.buildStartCommand();
-                    if (start != null) manager.execSync(start);
-                    sleep(1500);
-                    status = readStatus(manager);
-                    if (status.running() && manager.isCloseOverlay()) {
-                        manager.execSync(manager.buildOverlayCommand());
-                    }
+            BridgeManager.Status status = readStatus(manager);
+            if (!status.running() && manager.isShizukuReady()) {
+                String start = manager.buildStartCommand();
+                if (start != null) manager.execSync(start);
+                sleep(1500);
+                status = readStatus(manager);
+                if (status.running() && manager.isCloseOverlay()) {
+                    manager.execSync(manager.buildOverlayCommand());
                 }
-                if (status.running()) {
-                    showNotification("手柄桥已自动恢复 · "
-                            + (status.physical.isEmpty() ? "等待手柄" : status.physical), true);
-                    return;
-                }
+            }
+            if (status.running()) {
+                showNotification("手柄桥已自动恢复 · "
+                        + (status.physical.isEmpty() ? "等待手柄" : status.physical), true);
+                return;
             }
             showNotification("等待 Shizuku 启动并恢复手柄桥…", false);
             sleep(RETRY_INTERVAL);

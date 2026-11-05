@@ -152,6 +152,17 @@ public final class BridgeManager {
         IX360Service current = service;
         if (current == null) {
             connect();
+            for (int attempt = 0; attempt < 25 && service == null; ++attempt) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            current = service;
+        }
+        if (current == null) {
             return "ERROR: Shizuku 服务未就绪，请确认 Shizuku 已启动并已授权本应用";
         }
         try {
