@@ -42,6 +42,8 @@ ls -l /dev/uinput
 | `generic` | 兜底：仅做基本按键/轴转发 | 未列入的通用手柄 |
 
 > 上报为 `Xbox Wireless Controller` 等白名单名称的手柄通常能被游戏直接识别，无需本项目转发；这类设备也适合作为验证虚拟设备路径的对照。
+>
+> 已真机复验：REDMI 游戏手柄（蓝牙 PC / Xbox 模式）在 v0.2.0 下完整跑通——桥创建的虚拟设备被系统标记为 `GAMEPAD`，游戏设置出现「切换控制模式」。
 
 `--list` 输出中的 `profile=` 列是 `auto` 模式会选择的 Profile，`axes=` 列列出设备支持的轴，`triggers=` 列区分模拟/数字扳机，可用于快速诊断。厂商名（如 GameSir / BETOP / Flydigi）不会被硬套某个 Profile——同品牌不同型号的轴布局差异很大，一律按实际轴能力推断。
 
