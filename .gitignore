@@ -1,0 +1,39 @@
+# Gradle
+.gradle/
+build/
+app/build/
+.cxx/
+
+# IDE / local config
+.idea/
+*.iml
+local.properties
+captures/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Signing keys — never commit
+*.jks
+*.keystore
+keystore.properties
+
+# Build outputs and temporary artifacts
+*.apk
+*.aab
+*.ap_
+*.log
+*.pid
+*.tmp
+*.swp
+
+# Keep the prebuilt static native binaries shipped under assets
+!app/src/main/assets/
+!app/src/main/assets/bin/
+!app/src/main/assets/bin/**/
+!app/src/main/assets/bin/**/uinput_x360
+
+# Local agent state (not part of the open source project)
+.workbuddy/
+*.idsig
