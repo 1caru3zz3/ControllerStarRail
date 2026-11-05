@@ -40,6 +40,7 @@
 #define BIT_WORDS(bits) ((bits + (sizeof(unsigned long) * 8) - 1) / (sizeof(unsigned long) * 8))
 #define KEY_BITS BIT_WORDS(KEY_MAX)
 #define ABS_BITS BIT_WORDS(ABS_MAX)
+#define PROP_BITS 1
 
 #define STICK_MIN 0
 #define STICK_MAX 65535
@@ -112,6 +113,7 @@ typedef struct {
     unsigned short bus, vendor, product, version;
     unsigned long key_bits[KEY_BITS];
     unsigned long abs_bits[ABS_BITS];
+    unsigned long prop_bits[PROP_BITS];
     int has_hat;
 } device_info_t;
 
@@ -267,6 +269,7 @@ static int read_device_info(const char *path, device_info_t *out) {
     }
     ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(out->key_bits)), out->key_bits);
     ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(out->abs_bits)), out->abs_bits);
+    ioctl(fd, EVIOCGPROP(sizeof(out->prop_bits)), out->prop_bits);
     out->has_hat = has_bit(out->abs_bits, ABS_BITS, ABS_HAT0X) ||
                    has_bit(out->abs_bits, ABS_BITS, ABS_HAT0Y);
     close(fd);
@@ -277,15 +280,20 @@ static int looks_like_gamepad(const device_info_t *dev) {
     static const char *blacklist[] = {
         "touch", "Touch", "sensor", "Sensor", "accel", "gyro", "mouse", "Mouse",
         "keyboard", "Keyboard", "headset", "power", "Power", "input_mt", "uinput",
-        "compass", "light", "proximity", "hall", "charger"
+        "compass", "light", "proximity", "hall", "charger",
+        "Pen", "pen", "Stylus", "stylus", "Capacitive", "capacitive", "Digitizer"
     };
     size_t i;
+    /* BTN_JOYSTICK alone is not enough: some capacitive pens set that bit and
+     * were incorrectly detected as gamepads on real devices. */
     int has_key = has_bit(dev->key_bits, KEY_BITS, BTN_GAMEPAD) ||
                   has_bit(dev->key_bits, KEY_BITS, BTN_TL) ||
                   has_bit(dev->key_bits, KEY_BITS, BTN_TR) ||
+                  has_bit(dev->key_bits, KEY_BITS, BTN_SELECT) ||
                   has_bit(dev->key_bits, KEY_BITS, BTN_START) ||
                   has_bit(dev->key_bits, KEY_BITS, BTN_MODE) ||
-                  has_bit(dev->key_bits, KEY_BITS, BTN_JOYSTICK);
+                  has_bit(dev->key_bits, KEY_BITS, BTN_THUMBL) ||
+                  has_bit(dev->key_bits, KEY_BITS, BTN_THUMBR);
     int has_abs = has_bit(dev->abs_bits, ABS_BITS, ABS_X) ||
                   has_bit(dev->abs_bits, ABS_BITS, ABS_Y) ||
                   has_bit(dev->abs_bits, ABS_BITS, ABS_RX) ||
@@ -301,6 +309,9 @@ static int looks_like_gamepad(const device_info_t *dev) {
     for (i = 0; i < sizeof(blacklist) / sizeof(blacklist[0]); ++i) {
         if (strstr(dev->name, blacklist[i])) return 0;
     }
+    /* INPUT_PROP_DIRECT marks devices mapped straight to screen coordinates
+     * (touchscreens, digitizers, pens); a gamepad never sets it. */
+    if (has_bit(dev->prop_bits, PROP_BITS, INPUT_PROP_DIRECT)) return 0;
     return has_key && has_abs;
 }
 

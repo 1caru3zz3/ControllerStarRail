@@ -7,7 +7,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/native/uinput_x360.c"
 OUT_DIR="${OUT_DIR:-$ROOT/app/src/main/assets/bin}"
-API="${ANDROID_API:-24}"
+# API 34 sysroot is required for static arm64 binaries: older sysroots produce
+# a PT_TLS segment aligned to 8, which Android's Bionic loader rejects on
+# ARM64 ("TLS segment is underaligned, needs at least 64").
+API="${ANDROID_API:-34}"
 
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
 if [[ -z "$NDK" ]]; then
