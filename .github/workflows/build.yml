@@ -46,9 +46,11 @@ jobs:
         run: sdkmanager --install "ndk;26.3.11579264"
       - name: build all ABIs
         env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.3.11579264
           OUT_DIR: ${{ runner.temp }}/native-out
-        run: bash scripts/build-native.sh
+        run: |
+          # ANDROID_HOME comes from the runner image, not the workflow env context.
+          export ANDROID_NDK_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}/ndk/26.3.11579264"
+          bash scripts/build-native.sh
       - name: verify binaries
         run: find "${{ runner.temp }}/native-out" -type f -name uinput_x360 -printf '%s %p\n'
 
