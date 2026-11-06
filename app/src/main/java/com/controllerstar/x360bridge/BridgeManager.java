@@ -30,7 +30,9 @@ public final class BridgeManager {
     public static final String PREFIX = BINARY;
     public static final String STATUS_FILE = PREFIX + ".status";
     public static final String LOG_FILE = PREFIX + ".log";
+    public static final String PID_FILE = PREFIX + ".pid";
     public static final String MARKER = "---LOG---";
+    public static final String META_MARKER = "---META---";
 
     private static final String PREFS = "bridge_settings";
     private static final String KEY_PROFILE = "profile";
@@ -49,8 +51,12 @@ public final class BridgeManager {
         public long events = 0;
         public long uptime = 0;
         public String log = "";
+        public boolean pidAlive = false;
         public boolean running() {
-            return "running".equals(state) || "waiting".equals(state) || "starting".equals(state);
+            boolean active = "running".equals(state) || "waiting".equals(state) || "starting".equals(state);
+            /* A stale status file must never make the UI believe the bridge is
+             * alive: the detached process can be reclaimed by the system. */
+            return active && pidAlive;
         }
     }
 
@@ -140,10 +146,18 @@ public final class BridgeManager {
 
     public void execAsync(final String command, final Callback callback) {
         executor.execute(() -> {
-            String result = execSync(command);
+            String result;
+            try {
+                result = execSync(command);
+            } catch (Exception e) {
+                /* Never swallow the callback: callers use it to clear their
+                 * in-flight flag, otherwise every later action looks dead. */
+                result = "ERROR: " + e;
+            }
+            final String output = result;
             if (callback != null) {
                 android.os.Handler handler = new android.os.Handler(app.getMainLooper());
-                handler.post(() -> callback.onResult(result));
+                handler.post(() -> callback.onResult(output));
             }
         });
     }
@@ -209,13 +223,23 @@ public final class BridgeManager {
     public String installCommand() throws IOException {
         String source = extractBinary();
         if (source == null) return null;
-        return "cp '" + source + "' " + BINARY + " && chmod 755 " + BINARY;
+        /* Writing directly over a running executable fails with ETXTBSY
+         * ("Text file busy"). Stage it under a temp name and rename instead:
+         * rename() can replace a busy file, the live process keeps its inode. */
+        String temp = BINARY + ".new";
+        return "cp '" + source + "' " + temp + " && chmod 755 " + temp
+                + " && mv -f " + temp + " " + BINARY;
     }
 
     public String buildStartCommand() throws IOException {
         String install = installCommand();
         if (install == null) return null;
         StringBuilder command = new StringBuilder(install);
+        /* Clear any stale/old instance first (a dead process may have left a
+         * pid file behind), so the singleton lock never blocks a restart. */
+        command.append(" && if [ -f ").append(PID_FILE)
+                .append(" ]; then kill $(cat ").append(PID_FILE)
+                .append(") 2>/dev/null; sleep 1; fi");
         command.append(" && ").append(BINARY)
                 .append(" --detach --prefix ").append(PREFIX)
                 .append(" --profile ").append(getProfile());
@@ -239,7 +263,9 @@ public final class BridgeManager {
     }
 
     public String buildStatusCommand() {
-        return "cat " + STATUS_FILE + " 2>/dev/null; echo " + MARKER
+        return "cat " + STATUS_FILE + " 2>/dev/null; echo '" + META_MARKER + "'"
+                + "; if [ -f " + PID_FILE + " ] && kill -0 $(cat " + PID_FILE + ") 2>/dev/null; "
+                + "then echo alive; else echo dead; fi; echo '" + MARKER + "'"
                 + "; tail -n 40 " + LOG_FILE + " 2>/dev/null";
     }
 
@@ -250,9 +276,14 @@ public final class BridgeManager {
     public Status parseStatus(String raw) {
         Status status = new Status();
         if (raw == null) return status;
-        int marker = raw.indexOf(MARKER);
-        String json = marker >= 0 ? raw.substring(0, marker) : raw;
-        status.log = marker >= 0 ? raw.substring(marker + MARKER.length()).trim() : "";
+        int logAt = raw.indexOf(MARKER);
+        String head = logAt >= 0 ? raw.substring(0, logAt) : raw;
+        status.log = logAt >= 0 ? raw.substring(logAt + MARKER.length()).trim() : "";
+        int metaAt = head.indexOf(META_MARKER);
+        String json = metaAt >= 0 ? head.substring(0, metaAt) : head;
+        if (metaAt >= 0) {
+            status.pidAlive = head.substring(metaAt + META_MARKER.length()).contains("alive");
+        }
         int start = json.indexOf('{');
         int end = json.lastIndexOf('}');
         if (start < 0 || end <= start) return status;

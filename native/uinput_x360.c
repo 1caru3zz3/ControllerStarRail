@@ -243,7 +243,10 @@ static const char *profile_by_layout(const device_info_t *dev) {
     int ry = has_bit(dev->abs_bits, ABS_BITS, ABS_RY);
     int z = has_bit(dev->abs_bits, ABS_BITS, ABS_Z);
     int rz = has_bit(dev->abs_bits, ABS_BITS, ABS_RZ);
-    if (gas || brake) return "redmi";
+    /* GAS/BRAKE triggers + Z/RZ as the right stick is a common generic Android
+     * layout (e.g. GameSir X5 Lite). The mapping is equivalent to "redmi", but
+     * naming it "android" avoids confusing labels on non-Redmi devices. */
+    if (gas || brake) return "android";
     if (rx && ry) return "xbox";
     if (z && rz) return "android";
     return "generic";
@@ -594,6 +597,8 @@ static void cleanup(void) {
         bridge.virtual_fd = -1;
     }
     unlink(bridge.pid_path);
+    memset(&bridge.physical, 0, sizeof(bridge.physical));
+    bridge.events = 0;
     write_status("stopped");
     log_line("bridge stopped");
     if (bridge.lock_fd >= 0) close(bridge.lock_fd);

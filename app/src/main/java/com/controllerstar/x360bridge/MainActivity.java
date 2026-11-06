@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     private final List<View> deviceRows = new ArrayList<>();
     private boolean refreshing;
     private boolean logExpanded;
+    private long lastDeviceListAttempt = 0L;
     private BridgeManager.Status status = new BridgeManager.Status();
 
     private View lampShizuku, lampBridge, lampPhysical, lampVirtual;
@@ -137,8 +138,14 @@ public class MainActivity extends Activity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.addView(smallButton("刷新状态", v -> refresh()), weighted());
-        actions.addView(smallButton("设备列表", v -> refreshDevices()), weighted());
+        actions.addView(smallButton("刷新状态", v -> {
+            toast("正在刷新状态…");
+            refresh(true);
+        }), weighted());
+        actions.addView(smallButton("设备列表", v -> {
+            toast("正在扫描手柄…");
+            refreshDevices(true);
+        }), weighted());
         actions.addView(smallButton("关闭浮层", v -> closeOverlay()), weighted());
         LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -149,7 +156,10 @@ public class MainActivity extends Activity {
         deviceContainer = new LinearLayout(this);
         deviceContainer.setOrientation(LinearLayout.VERTICAL);
         deviceCard.addView(deviceContainer);
-        deviceCard.addView(smallButton("刷新设备列表", v -> refreshDevices()));
+        deviceCard.addView(smallButton("刷新设备列表", v -> {
+            toast("正在扫描手柄…");
+            refreshDevices(true);
+        }));
         root.addView(deviceCard);
 
         LinearLayout settingsCard = card("设置");
@@ -314,8 +324,15 @@ public class MainActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    private Toast currentToast;
+
     private void toast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        /* Cancel the previous toast and create a fresh one: a reused instance
+         * keeps stale text on some OEM ROMs, while plain makeText() queues up
+         * toasts so rapid taps show the previous action's message. */
+        if (currentToast != null) currentToast.cancel();
+        currentToast = Toast.makeText(this, message, Toast.LENGTH_SHORT);
+        currentToast.show();
     }
 
     private void toggle() {
@@ -351,19 +368,31 @@ public class MainActivity extends Activity {
     }
 
     private void closeOverlay() {
-        manager.execAsync(manager.buildOverlayCommand(), this::appendLog);
+        toast("正在关闭游戏中心浮层…");
+        manager.execAsync(manager.buildOverlayCommand(), result -> {
+            appendLog(result);
+            String first = result == null ? "" : result.trim().split("\\r?\\n")[0];
+            toast(first.isEmpty() ? "已发送关闭浮层命令" : first);
+        });
     }
 
     private void refresh() {
-        if (refreshing) return;
+        refresh(false);
+    }
+
+    /** A manual tap must never be swallowed by the 3s auto-refresh in flight. */
+    private void refresh(boolean manual) {
+        if (!manual && refreshing) return;
         refreshing = true;
         manager.execAsync(manager.buildStatusCommand(), result -> {
             refreshing = false;
             if (result != null && result.startsWith("ERROR:")) {
                 appendLog(result);
+                if (manual) toast("刷新失败：" + result);
             }
             status = manager.parseStatus(result);
             updateStatusUi();
+            if (manual) toast("状态已刷新");
         });
     }
 
@@ -379,17 +408,35 @@ public class MainActivity extends Activity {
         setLamp(lampVirtual, running ? COLOR_OK : COLOR_IDLE);
         valueVirtual.setText(running ? "045e:028e" : "未创建");
 
-        boolean hasPhysical = status.physical != null && !status.physical.isEmpty();
+        /* The status file keeps the last physical device after a clean stop.
+         * Only show it as connected while the bridge process is actually alive. */
+        boolean hasPhysical = running && status.physical != null && !status.physical.isEmpty();
         setLamp(lampPhysical, hasPhysical ? COLOR_OK : (running ? COLOR_WARN : COLOR_IDLE));
         valuePhysical.setText(hasPhysical ? status.physical : (running ? "等待连接" : "—"));
 
-        summary.setText(running
-                ? "已转发 " + status.events + " 个事件 · 运行 " + status.uptime + " 秒 · 方案 " + status.profile
-                : "启动后桥会独立常驻，直到设备重启前无需再操作");
+        if (!running && ("running".equals(status.state) || "waiting".equals(status.state)
+                || "starting".equals(status.state))) {
+            summary.setText("桥进程已退出（状态文件过期），点下方按钮重新启动");
+        } else {
+            String manualHint = "auto".equals(manager.getProfile())
+                    ? "" : " · 手动方案，摇杆错位请改回 auto";
+            summary.setText(running
+                    ? "已转发 " + status.events + " 个事件 · 运行 " + status.uptime + " 秒 · 方案 "
+                            + status.profile + manualHint
+                    : "启动后桥会独立常驻，直到设备重启前无需再操作");
+        }
 
         mainButton.setText(running ? "停止手柄桥" : "启动手柄桥");
         paintButton(mainButton, running ? COLOR_DANGER : COLOR_PRIMARY);
         if (status.log != null && !status.log.isEmpty()) logView.setText(status.log);
+
+        /* If a gamepad was plugged in after the app opened (or the first scan
+         * failed), retry once every 10s instead of leaving an empty list. */
+        if (running && hasPhysical && deviceRows.size() <= 1
+                && System.currentTimeMillis() - lastDeviceListAttempt > 10000L) {
+            lastDeviceListAttempt = System.currentTimeMillis();
+            handler.post(() -> refreshDevices(false));
+        }
     }
 
     private void appendLog(String message) {
@@ -400,6 +447,10 @@ public class MainActivity extends Activity {
     }
 
     private void refreshDevices() {
+        refreshDevices(false);
+    }
+
+    private void refreshDevices(boolean showToast) {
         String command;
         try {
             command = manager.buildListCommand();
@@ -411,15 +462,16 @@ public class MainActivity extends Activity {
             appendLog("找不到当前 ABI 的手柄桥程序");
             return;
         }
-        manager.execAsync(command, this::renderDevices);
+        manager.execAsync(command, result -> renderDevices(result, showToast));
     }
 
-    private void renderDevices(String result) {
+    private void renderDevices(String result, boolean showToast) {
         deviceListCache = result == null ? "" : result;
         deviceContainer.removeAllViews();
         deviceRows.clear();
         if (result != null && result.startsWith("ERROR:")) {
             deviceContainer.addView(text(result, 12, COLOR_DANGER, false));
+            if (showToast) toast("扫描失败：" + result);
             return;
         }
         addDeviceRow("auto", "自动选择第一个手柄", "");
@@ -433,8 +485,12 @@ public class MainActivity extends Activity {
             }
         }
         if (deviceRows.size() <= 1) {
-            deviceContainer.addView(text("未发现手柄：请确认已连接且处于 PC/Xbox 模式，然后点「刷新设备列表」",
+            deviceContainer.addView(text("未发现手柄：请确认已连接并处于标准 HID 手柄模式（有线手柄需开启 OTG），然后点「刷新设备列表」",
                     12, COLOR_MUTED, false));
+        }
+        if (showToast) {
+            int found = deviceRows.size() - 1;
+            toast(found > 0 ? "发现 " + found + " 个手柄" : "未发现手柄，请确认连接与模式");
         }
     }
 
@@ -466,6 +522,6 @@ public class MainActivity extends Activity {
     private String deviceListCache = "";
 
     private void renderDevicesFromCache() {
-        renderDevices(deviceListCache);
+        renderDevices(deviceListCache, false);
     }
 }
