@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢参与 ControllerStarRail。本项目即将开源，欢迎 issue、PR 与新手柄适配。
+感谢参与 ControllerStarRail。项目已在 [GitHub](https://github.com/1caru3zz3/ControllerStarRail) 开源，欢迎到 [Issues](https://github.com/1caru3zz3/ControllerStarRail/issues) 反馈问题、提交 PR 与新手柄适配。
 
 ## 1. 提交 issue
 
@@ -15,7 +15,7 @@
 ## 2. 提交 PR
 
 - 一个 PR 聚焦一件事；较大改动先开 issue 讨论。
-- 仅改文档时请勿触碰 `native/`、`app/` 下的源码及构建目录（由主代理维护）。
+- 仅改文档时请勿触碰 `native/`、`app/` 下的源码及构建目录；源码改动请附构建验证结果。
 - native 改动需说明对应模块（发现 / Profile / 缩放 / 转发 / 守护 / 单例 / 状态）与参数影响。
 - 新增 Profile 或命令行参数要同步更新 `docs/COMPATIBILITY.md`、`docs/USAGE.md`、`README.md`。
 - 提交信息用简体中文或英文，简述「改了什么 + 为什么」。

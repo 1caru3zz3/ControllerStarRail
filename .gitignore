@@ -28,6 +28,10 @@ keystore.properties
 *.tmp
 *.swp
 
+# Shipped release APKs, kept in the repository for direct download
+!releases/
+!releases/*.apk
+
 # Keep the prebuilt static native binaries shipped under assets
 !app/src/main/assets/
 !app/src/main/assets/bin/

@@ -41,6 +41,13 @@
 
 ## 使用方式
 
+### 下载
+
+- 项目与源码：<https://github.com/1caru3zz3/ControllerStarRail>
+- 最新安装包：[Releases 页面](https://github.com/1caru3zz3/ControllerStarRail/releases) 或仓库内的 [releases/ControllerStarRail-v0.2.3.apk](releases/ControllerStarRail-v0.2.3.apk)
+- 直接覆盖安装即可（debug 签名，请勿当作正式分发版本）；问题反馈请到 [Issues](https://github.com/1caru3zz3/ControllerStarRail/issues)。
+- 想直接看效果：打开 [项目展示幻灯片](docs/presentation.html)（浏览器全屏即可播放）。
+
 ### 准备
 
 | 项目 | 要求 |
@@ -52,7 +59,7 @@
 
 ### 步骤
 
-1. 从 Releases 安装 APK（包名 `com.controllerstar.x360bridge`）。
+1. 从 [Releases](https://github.com/1caru3zz3/ControllerStarRail/releases) 安装 APK（包名 `com.controllerstar.x360bridge`）。
 2. 打开 App，确认「Shizuku」状态灯点亮；未点亮时按提示启动 Shizuku 并授权。
 3. 点「刷新设备列表」，选中你的手柄；Profile 保持 `auto` 即可（可在 `--list` 的 `profile=` 列查看建议值）。
 4. 点主开关启动桥，四路灯变绿后即可退出 App。
@@ -100,7 +107,8 @@ ControllerStarRail/
 ├── native/CMakeLists.txt
 ├── scripts/                              # 一键构建与 native 重建脚本
 ├── .github/workflows/                    # GitHub Actions CI
-├── docs/                                 # ARCHITECTURE / USAGE / COMPATIBILITY
+├── docs/                                 # ARCHITECTURE / USAGE / COMPATIBILITY / 展示幻灯片
+├── releases/                             # 可直接下载的安装包
 └── build.gradle / settings.gradle / gradle.properties
 ```
 
