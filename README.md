@@ -1,6 +1,8 @@
 # ControllerStarRail
 
 > 一个 **Shizuku 插件**：让 Android 手机 / 平板上的《崩坏：星穹铁道》（`com.miHoYo.hkrpg`）识别到游戏手柄，在设置中出现「切换控制模式」。无需 root、不修改游戏、不需要网络权限。
+>
+> **前置条件：必须安装 [Shizuku](https://github.com/RikkaApps/Shizuku) 并授权本应用。** 插件自身没有创建虚拟输入设备的权限，全部能力来自 Shizuku 提供的 shell 权限；未安装、未激活或未授权时，本插件无法工作。
 
 ## 已实测可用的手柄
 
@@ -20,6 +22,15 @@
 本插件借 **Shizuku** 提供的 shell 权限，把物理手柄「翻译」成一个标准的 Xbox 360 手柄，让游戏认为接上了受支持的手柄：不改游戏、不 root、不需要电脑常连。
 
 补充两点：改蓝牙别名无效（别名不会落到输入设备上报的名称与 ID 上）；游戏中心类 App 的触控映射是另一条链路，与本方案无关。
+
+## 前置依赖：Shizuku（必需）
+
+**没有 Shizuku，这个插件什么都做不了。** Android 普通应用无法写 `/dev/uinput`，也就无法创建虚拟手柄；本项目是通过 Shizuku 的 `UserService` 借到 shell（ADB）权限，才能启动 `uinput_x360` 并创建 `045e:028e` 的虚拟 Xbox 360 手柄。无障碍服务、Device Owner、改蓝牙别名都无法替代这一步。
+
+- 官方仓库与文档：<https://github.com/RikkaApps/Shizuku>（下载、激活方式、版本要求以该项目 README 为准）
+- 本项目**不内置、不修改、不分发** Shizuku，请自行安装激活后对本应用授权；一次授权长期记住。
+- 建议使用 **Shizuku 13.6.0+**。未 root 时，设备重启后 Shizuku 自身需要重新激活一次；Android 13+ 连接「可信 WLAN」时 13.6.0+ 可自动启动，满足条件即可全程自动恢复。
+- 注意区分：桥**启动后**会脱离 Shizuku 独立常驻，直到设备重启前都不用再打开 Shizuku / 无线调试 / App；但「启动桥」与「重启后恢复」这两步始终依赖 Shizuku 授权。
 
 ## 工作原理
 
@@ -45,6 +56,7 @@
 
 - 项目与源码：<https://github.com/1caru3zz3/ControllerStarRail>
 - 最新安装包：[Releases 页面](https://github.com/1caru3zz3/ControllerStarRail/releases) 或仓库内的 [releases/ControllerStarRail-v0.2.3.apk](releases/ControllerStarRail-v0.2.3.apk)
+- **必需前置**：[Shizuku 官方仓库](https://github.com/RikkaApps/Shizuku)（自行安装激活，本 APK 不包含）
 - 直接覆盖安装即可（debug 签名，请勿当作正式分发版本）；问题反馈请到 [Issues](https://github.com/1caru3zz3/ControllerStarRail/issues)。
 - 想直接看效果：打开 [项目展示幻灯片](docs/presentation.html)（浏览器全屏即可播放）。
 
@@ -53,14 +65,14 @@
 | 项目 | 要求 |
 | --- | --- |
 | 设备 | Android 手机 / 平板，内核提供可写的 `/dev/uinput` |
-| Shizuku | 建议 13.6.0+，按官方方式激活一次并授权本应用（一次授权长期记住） |
+| **Shizuku（必需）** | 建议 13.6.0+，自行安装激活并授权本应用（一次授权长期记住）；[官方仓库与文档](https://github.com/RikkaApps/Shizuku) |
 | 手柄 | 已连接并处于标准 HID 手柄模式；有线手柄需开启 OTG、避免触屏映射模式 |
 | 其它 | **不需要 root**；不需要网络权限 |
 
 ### 步骤
 
-1. 从 [Releases](https://github.com/1caru3zz3/ControllerStarRail/releases) 安装 APK（包名 `com.controllerstar.x360bridge`）。
-2. 打开 App，确认「Shizuku」状态灯点亮；未点亮时按提示启动 Shizuku 并授权。
+1. 安装 [Shizuku](https://github.com/RikkaApps/Shizuku) 并按其官方说明激活，再从 [Releases](https://github.com/1caru3zz3/ControllerStarRail/releases) 安装本插件 APK（包名 `com.controllerstar.x360bridge`）。
+2. 打开 App，确认「Shizuku」状态灯点亮；未点亮时按提示启动 Shizuku 并授权本应用。
 3. 点「刷新设备列表」，选中你的手柄；Profile 保持 `auto` 即可（可在 `--list` 的 `profile=` 列查看建议值）。
 4. 点主开关启动桥，四路灯变绿后即可退出 App。
 5. 进入游戏 → 设置 → 控制，应出现「切换控制模式」，按提示切换。
@@ -84,7 +96,8 @@
 
 | 现象 | 处理 |
 | --- | --- |
-| Shizuku 灯不亮 | 确认已激活并授权；未 root 时重启后需重新启动一次 Shizuku |
+| Shizuku 灯不亮 | 确认已安装 / 激活并授权；未 root 时重启后需重新启动一次 Shizuku；[官方仓库](https://github.com/RikkaApps/Shizuku) |
+| 能不能不装 Shizuku | **不能**。创建 `/dev/uinput` 虚拟设备需要 shell / root 权限，详见 [前置依赖](#前置依赖shizuku必需) |
 | 桥进程灯不亮 | 展开日志查看；确认 `/dev/uinput` 可用、对应 ABI 二进制存在 |
 | 手柄列表为空 | 确认手柄处于标准 HID 模式（有线手柄开 OTG）；用 `--list` 检查是否生成 event 节点 |
 | 游戏仍不出现「切换控制模式」 | **完全退出星铁后重新进入**（Unity / InControl 通常在启动时枚举手柄）；核对虚拟设备为 `045e:028e`；排查其它手柄抢占 |
@@ -123,7 +136,7 @@ ANDROID_NDK_HOME=/path/to/ndk bash scripts/build-native.sh   # 改动 C 源码�
 
 ## 致谢
 
-- **Shizuku**：提供无 root 的 shell 权限通道。
+- **[Shizuku](https://github.com/RikkaApps/Shizuku)**（RikkaApps）：本项目**唯一的权限来源**，提供无 root 的 shell 权限通道；没有它就无法创建虚拟手柄。请优先阅读其官方文档与许可。
 - **InControl**：Unity 手柄输入库（白名单机制的背景）。
 - **Linux uinput**：内核虚拟输入设备能力。
 
