@@ -58,7 +58,6 @@
 - 最新安装包：[Releases 页面](https://github.com/1caru3zz3/ControllerStarRail/releases) 或仓库内的 [releases/ControllerStarRail-v0.2.3.apk](releases/ControllerStarRail-v0.2.3.apk)
 - **必需前置**：[Shizuku 官方仓库](https://github.com/RikkaApps/Shizuku)（自行安装激活，本 APK 不包含）
 - 直接覆盖安装即可（debug 签名，请勿当作正式分发版本）；问题反馈请到 [Issues](https://github.com/1caru3zz3/ControllerStarRail/issues)。
-- 想直接看效果：打开 [项目展示幻灯片](docs/presentation.html)（浏览器全屏即可播放）。
 
 ### 准备
 
@@ -107,7 +106,7 @@
 
 **为什么不能像 GKD 那样完全免 Shizuku？** GKD 依赖无障碍服务，而创建 `/dev/uinput` 虚拟输入设备只有 shell / root 权限能做到；Dhizuku 的 Device Owner 只暴露设备管理 API，也不提供任意 shell 执行。二者都不适用于本方案，项目不宣称 100% 免 Shizuku。
 
-更多细节见 [使用说明](docs/USAGE.md)、[架构设计](docs/ARCHITECTURE.md)、[兼容性说明](docs/COMPATIBILITY.md)；另有面向普通玩家的 [项目展示幻灯片](docs/presentation.html)（可点击导航、全屏演示，支持自动播放与逐页导出，便于制作推广视频）。
+更多细节见 [使用说明](docs/USAGE.md)、[架构设计](docs/ARCHITECTURE.md)、[兼容性说明](docs/COMPATIBILITY.md)。
 
 ## 项目结构
 
@@ -120,7 +119,7 @@ ControllerStarRail/
 ├── native/CMakeLists.txt
 ├── scripts/                              # 一键构建与 native 重建脚本
 ├── .github/workflows/                    # GitHub Actions CI
-├── docs/                                 # ARCHITECTURE / USAGE / COMPATIBILITY / 展示幻灯片
+├── docs/                                 # ARCHITECTURE / USAGE / COMPATIBILITY
 ├── releases/                             # 可直接下载的安装包
 └── build.gradle / settings.gradle / gradle.properties
 ```
