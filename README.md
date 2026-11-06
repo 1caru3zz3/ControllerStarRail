@@ -87,7 +87,7 @@
 
 **为什么不能像 GKD 那样完全免 Shizuku？** GKD 依赖无障碍服务，而创建 `/dev/uinput` 虚拟输入设备只有 shell / root 权限能做到；Dhizuku 的 Device Owner 只暴露设备管理 API，也不提供任意 shell 执行。二者都不适用于本方案，项目不宣称 100% 免 Shizuku。
 
-更多细节见 [使用说明](docs/USAGE.md)、[架构设计](docs/ARCHITECTURE.md)、[兼容性说明](docs/COMPATIBILITY.md)。
+更多细节见 [使用说明](docs/USAGE.md)、[架构设计](docs/ARCHITECTURE.md)、[兼容性说明](docs/COMPATIBILITY.md)；另有可直接全屏演示的 [项目展示幻灯片](docs/presentation.html)（支持自动播放与逐页导出，便于制作推广视频）。
 
 ## 项目结构
 
