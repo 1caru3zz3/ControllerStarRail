@@ -10,11 +10,10 @@ on:
 permissions:
   contents: read
 
-# The GitHub-hosted Ubuntu image ships with an Android SDK, so no third-party
-# setup action is needed (setup-android@v3 used to fail while downloading the
-# command line tools). CI only verifies that the sources build; the installable
-# APK attached to a Release is built and signed by the maintainer, because a
-# CI-generated debug keystore would produce a different signature every run.
+# CI only verifies that the sources build. The installable APK attached to a
+# Release is built and signed by the maintainer with a fixed debug key, because
+# a CI-generated debug keystore differs on every run and cannot be installed
+# as an update.
 jobs:
   native:
     name: compile native binaries
@@ -25,15 +24,26 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: check preinstalled Android SDK
+      - name: prepare Android SDK tools
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          command -v sdkmanager
-          sdkmanager --version
+          set -e
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BIN=$(find "$SDK" -type f -name sdkmanager -printf '%h\n' 2>/dev/null | head -1 || true)
+          if [ -z "$BIN" ]; then
+            echo "sdkmanager missing, installing Android command line tools"
+            curl -fsSL -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            mkdir -p "$SDK/cmdline-tools"
+            unzip -q -o /tmp/cmdtools.zip -d "$SDK/cmdline-tools"
+            rm -rf "$SDK/cmdline-tools/latest"
+            mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
+            BIN="$SDK/cmdline-tools/latest/bin"
+          fi
+          echo "$BIN" >> "$GITHUB_PATH"
+          echo "using sdkmanager from $BIN"
       - name: accept SDK licenses
-        run: yes | sdkmanager --licenses > /dev/null || true
+        run: yes | sdkmanager --licenses > /dev/null 2>&1 || true
       - name: install NDK
-        run: yes | sdkmanager --install "ndk;26.3.11579264" > /dev/null
+        run: sdkmanager --install "ndk;26.3.11579264"
       - name: build all ABIs
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/26.3.11579264
@@ -51,10 +61,26 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: prepare Android SDK tools
+        run: |
+          set -e
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          BIN=$(find "$SDK" -type f -name sdkmanager -printf '%h\n' 2>/dev/null | head -1 || true)
+          if [ -z "$BIN" ]; then
+            echo "sdkmanager missing, installing Android command line tools"
+            curl -fsSL -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            mkdir -p "$SDK/cmdline-tools"
+            unzip -q -o /tmp/cmdtools.zip -d "$SDK/cmdline-tools"
+            rm -rf "$SDK/cmdline-tools/latest"
+            mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest"
+            BIN="$SDK/cmdline-tools/latest/bin"
+          fi
+          echo "$BIN" >> "$GITHUB_PATH"
+          echo "using sdkmanager from $BIN"
       - name: accept SDK licenses
-        run: yes | sdkmanager --licenses > /dev/null || true
+        run: yes | sdkmanager --licenses > /dev/null 2>&1 || true
       - name: install SDK components
-        run: yes | sdkmanager --install "platforms;android-35" "build-tools;35.0.0" > /dev/null
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
       - name: assemble release
         run: |
           chmod +x gradlew
