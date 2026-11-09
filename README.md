@@ -59,7 +59,7 @@
 ### 下载
 
 - 项目与源码：<https://github.com/1caru3zz3/ControllerStarRail>
-- 最新安装包：[Releases 页面](https://github.com/1caru3zz3/ControllerStarRail/releases) 或仓库内的 [releases/ControllerStarRail-v0.3.0.apk](releases/ControllerStarRail-v0.3.0.apk)（0.3.0 与 0.2.x 同签名，可直接覆盖安装）
+- 最新安装包：[Releases 页面](https://github.com/1caru3zz3/ControllerStarRail/releases) 或仓库内的 [releases/ControllerStarRail-v0.4.0.apk](releases/ControllerStarRail-v0.4.0.apk)（0.4.0 与 0.2.x / 0.3.0 同签名，可直接覆盖安装）
 - **必需前置**：[Shizuku 官方仓库](https://github.com/RikkaApps/Shizuku)（自行安装激活，本 APK 不包含）
 - 直接覆盖安装即可（debug 签名，请勿当作正式分发版本）；问题反馈请到 [Issues](https://github.com/1caru3zz3/ControllerStarRail/issues)。
 
