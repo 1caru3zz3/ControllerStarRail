@@ -10,14 +10,30 @@ android {
         applicationId 'com.controllerstar.x360bridge'
         minSdk 24
         targetSdk 33
-        versionCode 5
-        versionName '0.2.3'
+        versionCode 7
+        versionName '0.4.0'
     }
 
     sourceSets {
         main {
             aidl.srcDirs = ['src/main/aidl']
             assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    signingConfigs {
+        debug {
+            /* Reuse the project's fixed debug keystore when CSR_DEBUG_KEYSTORE is
+             * set, so locally built release APKs stay installable over earlier
+             * versions. CI leaves the variable unset and gets Gradle's default
+             * debug key, which is fine for build verification only. */
+            def compatStore = System.getenv('CSR_DEBUG_KEYSTORE')
+            if (compatStore && file(compatStore).exists()) {
+                storeFile file(compatStore)
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
         }
     }
 

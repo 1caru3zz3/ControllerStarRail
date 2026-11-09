@@ -2,6 +2,8 @@
 
 > 一个 **Shizuku 插件**：让 Android 手机 / 平板上的《崩坏：星穹铁道》（`com.miHoYo.hkrpg`）识别到游戏手柄，在设置中出现「切换控制模式」。无需 root、不修改游戏、不需要网络权限。
 >
+> 0.3.0 起可切换虚拟设备身份（Xbox 360 / Xbox One / Xbox Wireless / DS4 / DualSense），用于**实验性**适配其它按型号白名单的手柄游戏；星铁请保持默认的 Xbox 360 身份。
+>
 > **前置条件：必须安装 [Shizuku](https://github.com/RikkaApps/Shizuku) 并授权本应用。** 插件自身没有创建虚拟输入设备的权限，全部能力来自 Shizuku 提供的 shell 权限；未安装、未激活或未授权时，本插件无法工作。
 
 ## 已实测可用的手柄
@@ -42,9 +44,11 @@
 
 ## 功能特性
 
-- 自动发现任意标准手柄，支持蓝牙 / 有线 / 接收器连接，热插拔自动重连。
+- 自动发现标准手柄，支持蓝牙 / 有线 / 接收器连接、热插拔自动重连和纯数字按键手柄；有线设备按 VID:PID 记住选择，重插后不受 event 编号变化影响。
 - 内置 Profile：`auto` / `redmi` / `xbox` / `ps` / `android` / `switch` / `generic`；`auto` 按设备身份或轴布局推断，也支持 `--config` 自定义映射。
-- App：四路灯状态卡片、一键启停、手柄列表与选择、Profile 与自启开关、可折叠日志。
+- **身份预设**：`xbox360`（默认）/ `xboxone` / `xboxbt` / `ds4` / `dualsense`，为按型号白名单的游戏提供不同 VID:PID、名称与总线类型；启动日志会打印实际身份与轴绑定表。
+- **扳机专项修复**：按实际轴能力自动绑定，一个虚拟轴只接一个物理源；支持 Android 模拟扳机及 `Z/RZ` 右摇杆 + 数字扳机布局，杜绝 LT/RT 与右摇杆串轴。
+- App：「Shizuku → 手柄 → 启动桥」三步引导，Shizuku 未安装 / 未启动 / 未授权时提供对应操作；手柄列表显示连接方式、ID 与建议布局。
 - 通知栏控制与快捷设置磁贴，不打开 App 也能启停。
 - `BOOT_COMPLETED` 接收者 + 短暂前台服务轮询重试，在 Shizuku 可用后自动恢复桥。
 - 三架构静态二进制（`arm64-v8a` / `armeabi-v7a` / `x86_64`），按 `Build.SUPPORTED_ABIS` 自动选择。
@@ -55,7 +59,7 @@
 ### 下载
 
 - 项目与源码：<https://github.com/1caru3zz3/ControllerStarRail>
-- 最新安装包：[Releases 页面](https://github.com/1caru3zz3/ControllerStarRail/releases) 或仓库内的 [releases/ControllerStarRail-v0.2.3.apk](releases/ControllerStarRail-v0.2.3.apk)
+- 最新安装包：[Releases 页面](https://github.com/1caru3zz3/ControllerStarRail/releases) 或仓库内的 [releases/ControllerStarRail-v0.3.0.apk](releases/ControllerStarRail-v0.3.0.apk)（0.3.0 与 0.2.x 同签名，可直接覆盖安装）
 - **必需前置**：[Shizuku 官方仓库](https://github.com/RikkaApps/Shizuku)（自行安装激活，本 APK 不包含）
 - 直接覆盖安装即可（debug 签名，请勿当作正式分发版本）；问题反馈请到 [Issues](https://github.com/1caru3zz3/ControllerStarRail/issues)。
 
@@ -70,11 +74,11 @@
 
 ### 步骤
 
-1. 安装 [Shizuku](https://github.com/RikkaApps/Shizuku) 并按其官方说明激活，再从 [Releases](https://github.com/1caru3zz3/ControllerStarRail/releases) 安装本插件 APK（包名 `com.controllerstar.x360bridge`）。
-2. 打开 App，确认「Shizuku」状态灯点亮；未点亮时按提示启动 Shizuku 并授权本应用。
-3. 点「刷新设备列表」，选中你的手柄；Profile 保持 `auto` 即可（可在 `--list` 的 `profile=` 列查看建议值）。
-4. 点主开关启动桥，四路灯变绿后即可退出 App。
-5. 进入游戏 → 设置 → 控制，应出现「切换控制模式」，按提示切换。
+1. 从 [Releases](https://github.com/1caru3zz3/ControllerStarRail/releases) 安装本插件 APK（包名 `com.controllerstar.x360bridge`）并打开。
+2. 按首页第 1 步检查 Shizuku：未安装时可前往官方下载，已安装未启动时可直接打开，运行后按弹窗授权本应用。
+3. 连接手柄，等首页第 2 步显示已检测到；未出现时点「重新检测手柄」查看模式与 OTG 提示。选中你的手柄，Profile 保持 `auto`。
+4. 点「③ 启动手柄桥」，桥与虚拟手柄状态变绿后即可退出 App。
+5. **完全退出星铁再重进**，进入设置 → 控制，应出现「切换控制模式」。
 
 > 若系统有游戏中心类的虚拟按键浮层遮挡操作，可在 App 里点「关闭浮层」（等价于 `am force-stop com.xiaomi.gamecenter`）。
 
@@ -101,8 +105,11 @@
 | 手柄列表为空 | 确认手柄处于标准 HID 模式（有线手柄开 OTG）；用 `--list` 检查是否生成 event 节点 |
 | 游戏仍不出现「切换控制模式」 | **完全退出星铁后重新进入**（Unity / InControl 通常在启动时枚举手柄）；核对虚拟设备为 `045e:028e`；排查其它手柄抢占 |
 | 状态显示运行中但游戏无手柄 | 桥进程可能已被系统回收；新版会校验 pid 并如实显示「未运行」，点启动即可恢复 |
-| 按键错乱 / 摇杆幅度不对 | 换 Profile 或用 `--config` 自定义映射；轴值会按物理 min/max 线性缩放 |
-| 数字扳机按了没反应 | 部分手柄的 LT/RT 是按键而非模拟轴，附 `--list` 与 `getevent -pl` 输出提 issue |
+| 按键错乱 / 摇杆幅度不对 | 保持 `auto`；在 App 设置里查看日志 `bind LX/LY/RX/RY/LT/RT` 绑定表，必要时用 `--config` 覆盖 |
+| **LT / RT 按反，或推右摇杆触发扳机** | 轴绑定串了（0.2.x 的已知问题） | 升级 0.3.0 后保持 `auto`；仍反则开「交换 LT / RT」；松开却满行程则开「反转扳机极性」 |
+| 数字扳机按了没反应 / 跳变 | 薄膜开关或按键式扳机 | 0.3.0 已自动二值化并支持 `BTN_TL2` / `BTN_TR2`；可在设置里把扳机模式改为「强制二值」 |
+| 切换身份后游戏仍不认 | 游戏可能校验系统蓝牙配对列表 | 属实验性功能；原神 / 鸣潮的攻克路径见 [兼容性说明](docs/COMPATIBILITY.md) |
+| 玩原神 / 绝区零 / 终末地要不要开桥 | 这三款是通用检测或按 VID:PID 判定，REDMI 手柄**原生模式**很可能直接被认 | **先关桥**再进游戏；开桥会独占物理手柄并多出一个虚拟手柄，反而容易双重输入。只有星铁这类按设备名白名单的游戏才需要桥，详见 [兼容性说明](docs/COMPATIBILITY.md) 第 8 节 |
 
 **为什么不能像 GKD 那样完全免 Shizuku？** GKD 依赖无障碍服务，而创建 `/dev/uinput` 虚拟输入设备只有 shell / root 权限能做到；Dhizuku 的 Device Owner 只暴露设备管理 API，也不提供任意 shell 执行。二者都不适用于本方案，项目不宣称 100% 免 Shizuku。
 

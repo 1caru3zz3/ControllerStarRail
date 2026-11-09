@@ -1,7 +1,11 @@
 package com.controllerstar.x360bridge;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -39,6 +43,7 @@ public class MainActivity extends Activity {
     private final List<View> deviceRows = new ArrayList<>();
     private boolean refreshing;
     private boolean logExpanded;
+    private boolean shizukuPromptShown;
     private long lastDeviceListAttempt = 0L;
     private BridgeManager.Status status = new BridgeManager.Status();
 
@@ -66,14 +71,9 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         manager = BridgeManager.get(this);
         setContentView(buildUi());
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
-                        != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 1002);
-        }
         manager.connect();
-        refreshDevices();
         refresh();
+        handler.post(this::showShizukuPromptIfNeeded);
     }
 
     @Override
@@ -81,6 +81,7 @@ public class MainActivity extends Activity {
         super.onResume();
         handler.removeCallbacks(refreshTask);
         handler.post(refreshTask);
+        if (manager.isShizukuReady() && deviceRows.size() <= 1) refreshDevices();
     }
 
     @Override
@@ -101,26 +102,35 @@ public class MainActivity extends Activity {
 
         TextView title = text("手柄桥", 24, COLOR_TEXT, true);
         root.addView(title);
-        TextView subtitle = text("把任意手柄映射为星铁可识别的 Xbox 360 手柄", 13, COLOR_MUTED, false);
-        subtitle.setPadding(0, dp(4), 0, dp(16));
+        TextView subtitle = text("按顺序完成三步，让星铁识别你的手柄", 13, COLOR_MUTED, false);
+        subtitle.setPadding(0, dp(4), 0, dp(4));
         root.addView(subtitle);
+        TextView flow = text("① 连接 Shizuku  →  ② 检测手柄  →  ③ 启动桥", 14,
+                COLOR_PRIMARY, true);
+        flow.setPadding(0, dp(4), 0, dp(16));
+        root.addView(flow);
 
-        LinearLayout statusCard = card("运行状态");
-        StatusRow shizuku = addStatusRow(statusCard, "Shizuku");
+        LinearLayout statusCard = card("使用进度");
+        StatusRow shizuku = addStatusRow(statusCard, "第 1 步 · Shizuku");
         lampShizuku = shizuku.lamp;
         valueShizuku = shizuku.value;
-        StatusRow bridge = addStatusRow(statusCard, "桥接进程");
-        lampBridge = bridge.lamp;
-        valueBridge = bridge.value;
-        StatusRow physical = addStatusRow(statusCard, "物理手柄");
+        StatusRow physical = addStatusRow(statusCard, "第 2 步 · 物理手柄");
         lampPhysical = physical.lamp;
         valuePhysical = physical.value;
-        StatusRow virtual = addStatusRow(statusCard, "虚拟 Xbox 360");
+        StatusRow bridge = addStatusRow(statusCard, "第 3 步 · 手柄桥");
+        lampBridge = bridge.lamp;
+        valueBridge = bridge.value;
+        StatusRow virtual = addStatusRow(statusCard, "虚拟手柄");
         lampVirtual = virtual.lamp;
         valueVirtual = virtual.value;
         summary = text("尚未启动", 12, COLOR_MUTED, false);
         summary.setPadding(0, dp(8), 0, 0);
         statusCard.addView(summary);
+        TextView shizukuHelp = text("Shizuku 未就绪？点这里检查、安装、启动或授权", 12,
+                COLOR_PRIMARY, false);
+        shizukuHelp.setPadding(0, dp(10), 0, 0);
+        shizukuHelp.setOnClickListener(v -> showShizukuPrompt());
+        statusCard.addView(shizukuHelp);
         root.addView(statusCard);
 
         mainButton = new Button(this);
@@ -152,17 +162,19 @@ public class MainActivity extends Activity {
         actionsLp.bottomMargin = dp(12);
         root.addView(actions, actionsLp);
 
-        LinearLayout deviceCard = card("手柄设备");
+        LinearLayout deviceCard = card("第 2 步 · 连接并选择手柄");
         deviceContainer = new LinearLayout(this);
         deviceContainer.setOrientation(LinearLayout.VERTICAL);
+        deviceContainer.addView(text("完成 Shizuku 连接后会自动检测；也可先连接手柄。",
+                12, COLOR_MUTED, false));
         deviceCard.addView(deviceContainer);
-        deviceCard.addView(smallButton("刷新设备列表", v -> {
+        deviceCard.addView(smallButton("重新检测手柄", v -> {
             toast("正在扫描手柄…");
             refreshDevices(true);
         }));
         root.addView(deviceCard);
 
-        LinearLayout settingsCard = card("设置");
+        LinearLayout settingsCard = card("高级设置（通常保持默认即可）");
         settingsCard.addView(text("映射方案（重启桥后生效）", 13, COLOR_MUTED, false));
         Spinner spinner = new Spinner(this);
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
@@ -186,6 +198,59 @@ public class MainActivity extends Activity {
         });
         settingsCard.addView(spinner, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        settingsCard.addView(text("虚拟设备身份（重启桥后生效；星铁用默认，原神 / 鸣潮可试蓝牙型号）",
+                13, COLOR_MUTED, false));
+        Spinner identitySpinner = new Spinner(this);
+        ArrayAdapter<String> identityAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, BridgeManager.IDENTITY_LABELS);
+        identityAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        identitySpinner.setAdapter(identityAdapter);
+        int identitySelected = 0;
+        for (int i = 0; i < BridgeManager.IDENTITIES.length; ++i) {
+            if (BridgeManager.IDENTITIES[i].equals(manager.getIdentity())) identitySelected = i;
+        }
+        identitySpinner.setSelection(identitySelected);
+        identitySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                manager.setIdentity(BridgeManager.IDENTITIES[position]);
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+        settingsCard.addView(identitySpinner, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        settingsCard.addView(text("扳机处理（LT / RT 错位或跳变时调整）", 13, COLOR_MUTED, false));
+        Spinner triggerSpinner = new Spinner(this);
+        ArrayAdapter<String> triggerAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, BridgeManager.TRIGGER_MODE_LABELS);
+        triggerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        triggerSpinner.setAdapter(triggerAdapter);
+        int triggerSelected = 0;
+        for (int i = 0; i < BridgeManager.TRIGGER_MODES.length; ++i) {
+            if (BridgeManager.TRIGGER_MODES[i].equals(manager.getTriggerMode())) triggerSelected = i;
+        }
+        triggerSpinner.setSelection(triggerSelected);
+        triggerSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                manager.setTriggerMode(BridgeManager.TRIGGER_MODES[position]);
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+        settingsCard.addView(triggerSpinner, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        settingsCard.addView(settingSwitch("交换 LT / RT（左右按反时开启）",
+                manager.isTriggerSwap(), (button, checked) -> manager.setTriggerSwap(checked)));
+        settingsCard.addView(settingSwitch("反转扳机极性（松开却满行程时开启）",
+                manager.isTriggerInvert(), (button, checked) -> manager.setTriggerInvert(checked)));
         settingsCard.addView(settingSwitch("开机后自动恢复（需 Shizuku 可用）",
                 manager.isAutostart(), (button, checked) -> manager.setAutostart(checked)));
         settingsCard.addView(settingSwitch("独占物理手柄（避免双重输入）",
@@ -209,7 +274,7 @@ public class MainActivity extends Activity {
         logCard.addView(logView);
         root.addView(logCard);
 
-        TextView help = text("首次使用：启动 Shizuku 并授权本应用 → 连接手柄 → 在设备列表选中 → 点「启动手柄桥」→ 进入星铁设置查看「切换控制模式」。桥启动后独立常驻，可退出本应用；仅在设备重启后才可能需要重新启动 Shizuku。",
+        TextView help = text("首次使用：启动 Shizuku 并授权本应用 → 连接手柄 → 在设备列表选中 → 点「启动手柄桥」→ 完全退出游戏后重进。默认虚拟身份适用于星穹铁道；若 LT / RT 按反，先开启「交换 LT / RT」，仍不对再试「反转扳机极性」。切换身份或扳机设置后需重启桥才生效，运行日志里会打印 bind LT / bind RT 对应的物理轴，便于排查。桥启动后独立常驻，可退出本应用；仅在设备重启后才可能需要重新启动 Shizuku。",
                 12, COLOR_MUTED, false);
         help.setPadding(dp(4), dp(4), dp(4), dp(24));
         root.addView(help);
@@ -335,12 +400,103 @@ public class MainActivity extends Activity {
         currentToast.show();
     }
 
-    private void toggle() {
-        if (!manager.isShizukuReady()) {
-            toast("请先启动 Shizuku 并授权本应用");
+    private void showShizukuPromptIfNeeded() {
+        if (shizukuPromptShown || manager.isShizukuReady()) return;
+        shizukuPromptShown = true;
+        showShizukuPrompt();
+    }
+
+    private void showShizukuPrompt() {
+        if (isFinishing()) return;
+        if (manager.isShizukuReady()) {
             manager.connect();
             refresh();
+            toast("Shizuku 已启动并授权");
             return;
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        if (!manager.isShizukuInstalled()) {
+            builder.setTitle("需要安装 Shizuku")
+                    .setMessage("手柄桥必须借助 Shizuku 获得创建虚拟手柄所需的 shell 权限。"
+                            + "本应用自身不能替代它，也不会收集数据。\n\n"
+                            + "请从官方 Releases 下载安装，安装后返回本页重新检查。")
+                    .setPositiveButton("前往官方下载", (dialog, which) -> openShizukuDownload());
+        } else if (!manager.isShizukuRunning()) {
+            builder.setTitle("需要启动 Shizuku")
+                    .setMessage("已检测到 Shizuku，但它的服务尚未运行。请打开 Shizuku，"
+                            + "按其界面指引完成「启动」。未 root 设备通常需要无线调试；"
+                            + "启动成功后返回本应用。\n\n仅安装 Shizuku 而不启动服务，手柄桥仍无法工作。")
+                    .setPositiveButton("打开 Shizuku", (dialog, which) -> launchShizuku());
+        } else {
+            builder.setTitle("需要授权 Shizuku")
+                    .setMessage("Shizuku 已运行，但手柄桥尚未获得授权。请在接下来的系统弹窗中允许，"
+                            + "授权一次后会长期记住。")
+                    .setPositiveButton("申请授权", (dialog, which) -> {
+                        manager.connect();
+                        toast("请在 Shizuku 弹窗中允许授权");
+                    });
+        }
+        builder.setNegativeButton("稍后", null)
+                .setNeutralButton("重新检查", (dialog, which) -> handler.postDelayed(() -> {
+                    refresh();
+                    showShizukuPrompt();
+                }, 500))
+                .show();
+    }
+
+    private void launchShizuku() {
+        Intent intent = getPackageManager().getLaunchIntentForPackage(BridgeManager.SHIZUKU_PACKAGE);
+        if (intent == null) {
+            toast("无法打开 Shizuku，请手动从桌面启动");
+            return;
+        }
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            toast("无法打开 Shizuku，请手动从桌面启动");
+        }
+    }
+
+    private void openShizukuDownload() {
+        Intent intent = new Intent(Intent.ACTION_VIEW,
+                Uri.parse("https://github.com/RikkaApps/Shizuku/releases"));
+        try {
+            startActivity(intent);
+        } catch (ActivityNotFoundException e) {
+            toast("未找到浏览器，请访问 github.com/RikkaApps/Shizuku/releases");
+        }
+    }
+
+    private void showControllerHelp() {
+        new AlertDialog.Builder(this)
+                .setTitle("第 2 步：先连接手柄")
+                .setMessage("请先让手柄进入 Android 原生 HID 模式，再点「重新检测手柄」。\n\n"
+                        + "• 蓝牙手柄：在系统设置中完成配对。\n"
+                        + "• Type-C / USB 手柄：插好接口，部分设备需开启 OTG。\n"
+                        + "• 盖世小鸡 X5 / X5 Lite：使用深蓝灯的原生直连模式，"
+                        + "不要使用触屏映射模式；休眠后按 A/B/X/Y/Home 唤醒。\n\n"
+                        + "检测到后点选手柄，映射方案保持 auto，再启动手柄桥。")
+                .setPositiveButton("重新检测", (dialog, which) -> refreshDevices(true))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void toggle() {
+        if (!manager.isShizukuReady()) {
+            showShizukuPrompt();
+            refresh();
+            return;
+        }
+        if (!status.running() && deviceRows.size() <= 1) {
+            refreshDevices(true);
+            showControllerHelp();
+            return;
+        }
+        if (!status.running() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 1002);
         }
         String command;
         try {
@@ -398,42 +554,50 @@ public class MainActivity extends Activity {
 
     private void updateStatusUi() {
         boolean binder = manager.isShizukuRunning();
-        boolean ready = manager.isShizukuReady() && manager.isServiceConnected();
+        boolean authorized = manager.isShizukuReady();
+        boolean ready = authorized && manager.isServiceConnected();
         setLamp(lampShizuku, ready ? COLOR_OK : (binder ? COLOR_WARN : COLOR_IDLE));
-        valueShizuku.setText(ready ? "已连接" : (binder ? "待授权" : "未运行"));
+        valueShizuku.setText(ready ? "已连接" : binder
+                ? (authorized ? "连接中" : "待授权")
+                : (manager.isShizukuInstalled() ? "已安装未启动" : "未安装"));
 
         boolean running = status.running();
-        setLamp(lampBridge, running ? COLOR_OK : COLOR_IDLE);
-        valueBridge.setText(running ? status.state : "未运行");
-        setLamp(lampVirtual, running ? COLOR_OK : COLOR_IDLE);
-        valueVirtual.setText(running ? "045e:028e" : "未创建");
+        int detected = Math.max(0, deviceRows.size() - 1);
+        boolean bridgePhysical = running && status.physical != null && !status.physical.isEmpty();
+        boolean hasPhysical = bridgePhysical || detected > 0;
+        setLamp(lampPhysical, hasPhysical ? COLOR_OK : (authorized ? COLOR_WARN : COLOR_IDLE));
+        valuePhysical.setText(bridgePhysical ? status.physical : detected > 0
+                ? "已检测到 " + detected + " 个" : (authorized ? "未检测到" : "等待第 1 步"));
 
-        /* The status file keeps the last physical device after a clean stop.
-         * Only show it as connected while the bridge process is actually alive. */
-        boolean hasPhysical = running && status.physical != null && !status.physical.isEmpty();
-        setLamp(lampPhysical, hasPhysical ? COLOR_OK : (running ? COLOR_WARN : COLOR_IDLE));
-        valuePhysical.setText(hasPhysical ? status.physical : (running ? "等待连接" : "—"));
+        setLamp(lampBridge, running ? COLOR_OK : COLOR_IDLE);
+        valueBridge.setText(running ? (bridgePhysical ? "运行中" : "等待手柄") : "未启动");
+        setLamp(lampVirtual, running ? COLOR_OK : COLOR_IDLE);
+        valueVirtual.setText(running ? status.virtualId : "未创建");
 
         if (!running && ("running".equals(status.state) || "waiting".equals(status.state)
                 || "starting".equals(status.state))) {
-            summary.setText("桥进程已退出（状态文件过期），点下方按钮重新启动");
-        } else {
+            summary.setText("桥进程已退出，请重新启动");
+        } else if (running) {
             String manualHint = "auto".equals(manager.getProfile())
-                    ? "" : " · 手动方案，摇杆错位请改回 auto";
-            summary.setText(running
-                    ? "已转发 " + status.events + " 个事件 · 运行 " + status.uptime + " 秒 · 方案 "
-                            + status.profile + manualHint
-                    : "启动后桥会独立常驻，直到设备重启前无需再操作");
+                    ? "" : " · 当前为手动映射，异常时请改回 auto";
+            summary.setText((bridgePhysical ? "桥已就绪：完全退出星铁后重新进入即可。"
+                    : "桥已启动，正在等待手柄连接。")
+                    + "\n已转发 " + status.events + " 个事件 · 运行 " + status.uptime
+                    + " 秒 · 方案 " + status.profile + manualHint);
+        } else if (!authorized) {
+            summary.setText("先完成第 1 步：安装、启动并授权 Shizuku");
+        } else if (detected == 0) {
+            summary.setText("Shizuku 已就绪。下一步连接手柄，然后重新检测");
+        } else {
+            summary.setText("手柄已就绪。保持映射为 auto，点击「③ 启动手柄桥」");
         }
 
-        mainButton.setText(running ? "停止手柄桥" : "启动手柄桥");
+        mainButton.setText(running ? "停止手柄桥" : !authorized
+                ? "① 检查并连接 Shizuku" : detected == 0 ? "② 检测手柄" : "③ 启动手柄桥");
         paintButton(mainButton, running ? COLOR_DANGER : COLOR_PRIMARY);
         if (status.log != null && !status.log.isEmpty()) logView.setText(status.log);
 
-        /* If a gamepad was plugged in after the app opened (or the first scan
-         * failed), retry once every 10s instead of leaving an empty list. */
-        if (running && hasPhysical && deviceRows.size() <= 1
-                && System.currentTimeMillis() - lastDeviceListAttempt > 10000L) {
+        if (authorized && System.currentTimeMillis() - lastDeviceListAttempt > 10000L) {
             lastDeviceListAttempt = System.currentTimeMillis();
             handler.post(() -> refreshDevices(false));
         }
@@ -451,6 +615,12 @@ public class MainActivity extends Activity {
     }
 
     private void refreshDevices(boolean showToast) {
+        lastDeviceListAttempt = System.currentTimeMillis();
+        if (!manager.isShizukuReady()) {
+            if (showToast) showShizukuPrompt();
+            updateStatusUi();
+            return;
+        }
         String command;
         try {
             command = manager.buildListCommand();
@@ -474,14 +644,13 @@ public class MainActivity extends Activity {
             if (showToast) toast("扫描失败：" + result);
             return;
         }
-        addDeviceRow("auto", "自动选择第一个手柄", "");
+        addDeviceRow(null);
         if (result != null) {
             String[] lines = result.split("\\r?\\n");
             for (String line : lines) {
                 if (line.isEmpty() || line.startsWith("#") || !line.contains("\t")) continue;
                 String[] fields = line.split("\\t");
-                if (fields.length < 3) continue;
-                addDeviceRow(fields[0], fields[1], fields[2]);
+                if (fields.length >= 3) addDeviceRow(fields);
             }
         }
         if (deviceRows.size() <= 1) {
@@ -490,14 +659,30 @@ public class MainActivity extends Activity {
         }
         if (showToast) {
             int found = deviceRows.size() - 1;
-            toast(found > 0 ? "发现 " + found + " 个手柄" : "未发现手柄，请确认连接与模式");
+            toast(found > 0 ? "发现 " + found + " 个手柄，点选后启动桥" : "未发现手柄，请确认连接与模式");
         }
+        updateStatusUi();
     }
 
-    private void addDeviceRow(String path, String name, String vidpid) {
-        boolean selected = path.equals(manager.getDevice());
-        String label = (selected ? "✓ " : "   ") + name
-                + (vidpid.isEmpty() ? "" : "  ·  " + vidpid);
+    private void addDeviceRow(String[] fields) {
+        boolean automatic = fields == null;
+        String path = automatic ? "auto" : fields[0];
+        String name = automatic ? "自动选择第一个手柄" : fields[1];
+        String vidpid = automatic ? "" : fields[2];
+        String selection = automatic || !vidpid.matches("[0-9a-fA-F]{4}:[0-9a-fA-F]{4}")
+                || "0000:0000".equals(vidpid) ? path : vidpid;
+        String saved = manager.getDevice();
+        boolean selected = selection.equals(saved) || path.equals(saved);
+        if (selected && !automatic && path.equals(saved)) manager.setDevice(selection);
+
+        String label = (selected ? "✓ " : "   ") + name;
+        if (!automatic) {
+            String bus = deviceField(fields, "bus=");
+            String connection = "5".equals(bus) ? "蓝牙" : "3".equals(bus) ? "USB 有线" : "总线 " + bus;
+            label += "\n" + connection + " · " + vidpid + " · " + path;
+            label += "\n建议 " + deviceField(fields, "profile=") + " · 扳机 "
+                    + deviceField(fields, "triggers=");
+        }
         TextView row = text(label, 13, selected ? COLOR_PRIMARY : COLOR_TEXT, selected);
         row.setPadding(dp(8), dp(10), dp(8), dp(10));
         if (selected) {
@@ -507,16 +692,19 @@ public class MainActivity extends Activity {
             row.setBackground(bg);
         }
         row.setOnClickListener(v -> {
-            manager.setDevice(path);
-            toast(selectedDeviceName(path, name) + " 已选为物理手柄，下次启动桥生效");
+            manager.setDevice(selection);
+            toast((automatic ? "自动选择" : name) + " 已选为物理手柄，下次启动桥生效");
             renderDevicesFromCache();
         });
         deviceContainer.addView(row);
         deviceRows.add(row);
     }
 
-    private String selectedDeviceName(String path, String name) {
-        return "auto".equals(path) ? "自动选择" : name;
+    private String deviceField(String[] fields, String prefix) {
+        for (String field : fields) {
+            if (field.startsWith(prefix)) return field.substring(prefix.length());
+        }
+        return "-";
     }
 
     private String deviceListCache = "";

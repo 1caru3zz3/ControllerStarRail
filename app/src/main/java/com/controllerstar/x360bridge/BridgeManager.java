@@ -26,6 +26,7 @@ import rikka.shizuku.Shizuku;
  * needed while a command is being issued.
  */
 public final class BridgeManager {
+    public static final String SHIZUKU_PACKAGE = "moe.shizuku.privileged.api";
     public static final String BINARY = "/data/local/tmp/x360bridge";
     public static final String PREFIX = BINARY;
     public static final String STATUS_FILE = PREFIX + ".status";
@@ -40,14 +41,35 @@ public final class BridgeManager {
     private static final String KEY_GRAB = "grab";
     private static final String KEY_AUTOSTART = "autostart";
     private static final String KEY_CLOSE_OVERLAY = "close_overlay";
+    private static final String KEY_IDENTITY = "identity";
+    private static final String KEY_TRIGGER_MODE = "trigger_mode";
+    private static final String KEY_TRIGGER_SWAP = "trigger_swap";
+    private static final String KEY_TRIGGER_INVERT = "trigger_invert";
 
     public static final String[] PROFILES = {"auto", "redmi", "xbox", "ps", "android", "switch", "generic"};
+
+    /* Identity presets must stay in sync with IDENTITIES[] in native/uinput_x360.c. */
+    public static final String[] IDENTITIES = {"xbox360", "xboxone", "xboxbt", "ds4", "dualsense"};
+    public static final String[] IDENTITY_LABELS = {
+            "Xbox 360（默认 · 星穹铁道）",
+            "Xbox One（USB）",
+            "Xbox Wireless（蓝牙 · 原神候选）",
+            "DualShock 4（蓝牙 · 原神候选）",
+            "DualSense（蓝牙 · 原神 / 鸣潮候选）"
+    };
+    public static final String[] TRIGGER_MODES = {"auto", "analog", "digital"};
+    public static final String[] TRIGGER_MODE_LABELS = {
+            "自动（推荐 · 识别薄膜扳机）",
+            "强制模拟量",
+            "强制二值（只分按下 / 松开）"
+    };
 
     public static final class Status {
         public String state = "unknown";
         public String profile = "-";
         public String physical = "";
         public String physicalPath = "";
+        public String virtualId = "045e:028e";
         public long events = 0;
         public long uptime = 0;
         public String log = "";
@@ -118,6 +140,15 @@ public final class BridgeManager {
 
     public boolean isShizukuRunning() {
         return Shizuku.pingBinder();
+    }
+
+    public boolean isShizukuInstalled() {
+        try {
+            app.getPackageManager().getPackageInfo(SHIZUKU_PACKAGE, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     public void connect() {
@@ -242,7 +273,11 @@ public final class BridgeManager {
                 .append(") 2>/dev/null; sleep 1; fi");
         command.append(" && ").append(BINARY)
                 .append(" --detach --prefix ").append(PREFIX)
-                .append(" --profile ").append(getProfile());
+                .append(" --profile ").append(getProfile())
+                .append(" --identity ").append(getIdentity())
+                .append(" --trigger-mode ").append(getTriggerMode());
+        if (isTriggerSwap()) command.append(" --trigger-swap");
+        if (isTriggerInvert()) command.append(" --trigger-invert");
         String device = getDevice();
         if (device != null && device.length() > 0 && !"auto".equals(device)) {
             command.append(" --device ").append(device);
@@ -293,6 +328,8 @@ public final class BridgeManager {
             status.profile = object.optString("profile", "-");
             status.physical = object.optString("physical", "");
             status.physicalPath = object.optString("physical_path", "");
+            status.virtualId = object.optString("vid", "045e") + ":"
+                    + object.optString("pid_hex", "028e");
             status.events = object.optLong("events", 0);
             status.uptime = object.optLong("uptime", 0);
         } catch (Exception ignored) {
@@ -311,4 +348,13 @@ public final class BridgeManager {
     public void setAutostart(boolean value) { prefs.edit().putBoolean(KEY_AUTOSTART, value).apply(); }
     public boolean isCloseOverlay() { return prefs.getBoolean(KEY_CLOSE_OVERLAY, false); }
     public void setCloseOverlay(boolean value) { prefs.edit().putBoolean(KEY_CLOSE_OVERLAY, value).apply(); }
+
+    public String getIdentity() { return prefs.getString(KEY_IDENTITY, "xbox360"); }
+    public void setIdentity(String value) { prefs.edit().putString(KEY_IDENTITY, value).apply(); }
+    public String getTriggerMode() { return prefs.getString(KEY_TRIGGER_MODE, "auto"); }
+    public void setTriggerMode(String value) { prefs.edit().putString(KEY_TRIGGER_MODE, value).apply(); }
+    public boolean isTriggerSwap() { return prefs.getBoolean(KEY_TRIGGER_SWAP, false); }
+    public void setTriggerSwap(boolean value) { prefs.edit().putBoolean(KEY_TRIGGER_SWAP, value).apply(); }
+    public boolean isTriggerInvert() { return prefs.getBoolean(KEY_TRIGGER_INVERT, false); }
+    public void setTriggerInvert(boolean value) { prefs.edit().putBoolean(KEY_TRIGGER_INVERT, value).apply(); }
 }

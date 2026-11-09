@@ -5,7 +5,7 @@
 | 项目 | 要求 |
 | --- | --- |
 | 目标设备 | Android 手机 / 平板（满足下列条件的设备均可尝试） |
-| 目标游戏 | 《崩坏：星穹铁道》`com.miHoYo.hkrpg` |
+| 目标游戏 | 默认《崩坏：星穹铁道》`com.miHoYo.hkrpg`；0.3.0 起可切换虚拟身份，**实验性**适配其它按型号白名单的手柄游戏（原神 / 鸣潮等，尚未真机复验） |
 | Android 版本 | 已在 Android 15 类设备验证；静态二进制以 API 34 sysroot 编译，更低版本未回归；自启动例外条件需 Android 13+ |
 | CPU ABI | `arm64-v8a` / `armeabi-v7a` / `x86_64`，按 `Build.SUPPORTED_ABIS` 选二进制 |
 | Shizuku | 13.6.0+（自动启动例外）；更旧版本可用但需手动启动 |
@@ -63,7 +63,7 @@ ls -l /dev/uinput
 
 实测（GameSir-X5 Lite，VID:PID `3537:1116`）：`ABS_X/Y/Z/RZ/GAS/BRAKE` 均为 0..255、`ABS_HAT0X/Y` 为 -1..1，标准 `BTN_GAMEPAD` 按键齐全；`auto` 会选 `android` 布局（Z/RZ → 右摇杆，GAS/BRAKE → 扳机），轴值自动缩放到虚拟设备量程，无需手动改 Profile。
 
-操作步骤：插好并开启 OTG → 打开 App →「刷新设备列表」→ 选中该手柄 → Profile 先用 `auto`（可参考 `--list` 的 `profile=` 建议）→ 启动桥 → **完全退出星铁后重新进入**，再检查设置里的「切换控制模式」。若右摇杆/扳机错乱，依次尝试 `xbox`、`android`、`generic`；若扳机完全无效，把 `--list` 与 `getevent -pl` 输出提交 issue，可补充「按键→轴」映射（当前 `--config` 仅支持轴→轴、键→键）。
+操作步骤：插好并开启 OTG → 打开 App →「刷新设备列表」→ 选中该手柄 → Profile 先用 `auto`（可参考 `--list` 的 `profile=` 建议）→ 启动桥 → **完全退出星铁后重新进入**，再检查设置里的「切换控制模式」。0.3.0 起 `auto` 会按实际轴能力自动绑定并打印 `bind LT` / `bind RT` 表，一般**无需手动切换 Profile**；若 LT / RT 左右按反，在 App 设置里开「交换 LT / RT」，若松开却满行程则开「反转扳机极性」。按键式扳机（`BTN_TL2` / `BTN_TR2`）已自动转为模拟轴。仍异常时附 `--list`、`getevent -pl` 与日志中的绑定表提交 issue（`--config` 目前仅支持轴→轴、键→键）。
 
 > 桥启动后虚拟设备才出现。若游戏在桥启动之前就已运行，Unity / InControl 一般不会动态重新枚举手柄，必须重启游戏；这是「桥已运行但游戏不显示」最常见的原因。
 
@@ -97,8 +97,63 @@ getevent -p  <event 节点>      # 各轴 min/max/fuzz/flat/resolution
 - 游戏更新可能调整 InControl 白名单；若「切换控制模式」消失，请核对虚拟设备仍为 `045e:028e`。
 - 小米游戏中心虚拟按键浮层与触控映射可能干扰操作，可用 `am force-stop com.xiaomi.gamecenter` 关闭。
 - 蓝牙别名修改、小米游戏中心识别均无效（已验证并放弃）。
-- 部分手柄的 LT/RT 虽上报为模拟轴，物理却是开关，只有 0 / 满值两态；`--config` 目前不支持把按键映射成轴事件。
+- 部分手柄的 LT/RT 虽上报为模拟轴，物理却是开关（0 / 满值两态）；0.3.0 会自动二值化，必要时可用 `--trigger-mode digital` 强制。
+- 非 `xbox360` 身份为实验性：切换 VID:PID 后 Android 可能选用不同的 `.kl` 按键布局，且游戏若额外校验系统蓝牙配对列表，单靠 `BUS_BLUETOOTH` 仍可能被拒绝。
+- 震动（`EV_FF`）、LED、陀螺仪与按前台 App 自动切换身份仍未实现。
 - 脱离 App 的 native 进程仍可能被系统回收；状态文件会残留上一次的 `running` / `waiting`。App 会同时校验 pid 存活状态，如实显示「未运行」，点一次启动即可恢复。
+
+## 7. 轴绑定与扳机（0.3.0）
+
+桥在连接物理手柄时读取 `EVIOCGBIT` 与 `EVIOCGABS`，为每个虚拟语义绑定**唯一**一个物理来源；未绑定轴直接丢弃，不再做 passthrough 猜测。日志中的 `bind ...` 表是排查第一入口。
+
+| 物理轴能力 | LT | RT | 右摇杆 | 典型设备 |
+| --- | --- | --- | --- | --- |
+| `X/Y/Z/RZ/GAS/BRAKE` + HAT | `BRAKE` | `GAS` | `Z/RZ` | REDMI 游戏手柄、盖世小鸡 X5 Lite |
+| `X/Y/RX/RY/Z/RZ` + HAT | `Z` | `RZ` | `RX/RY` | 标准 Xbox 360 / One、DS4、DualSense |
+| `X/Y/RX/RY` + `BTN_TL2/TR2` | `BTN_TL2`（转模拟轴） | `BTN_TR2`（转模拟轴） | `RX/RY` | 只有数字扳机的手柄 |
+| `X/Y/Z/RZ` + `BTN_TL2/TR2` | `BTN_TL2`（转模拟轴） | `BTN_TR2`（转模拟轴） | `Z/RZ` | 0.4.0 新增识别的 Android 数字扳机布局 |
+
+0.4.0 起也允许只有标准手柄按键、没有 `EV_ABS` 的纯数字设备进入列表。物理手柄断开时会复位全部虚拟按键与轴，避免拔线或休眠后按键卡住。
+
+判定遵循 Linux gamepad 规范与 AOSP `Vendor_045e_Product_028e.kl`：`BRAKE` = 左扳机、`GAS` = 右扳机；虚拟 `ABS_Z` = LTRIGGER、`ABS_RZ` = RTRIGGER。0.2.x 的 `redmi` / `android` Profile 把这两者写反，是「LT/RT 错位」的主因。
+
+扳机还做三件修正：有符号轴的静止点按 0 而非 `minimum` 计算（避免常半按）；缺 `EVIOCGABS` 时用 0..255 兜底并按运行时观测值扩展量程（避免只有四分之一行程）；运行时取值数 ≤3 时自动二值化，>3 自动退回模拟量。
+
+## 8. 其它游戏：先别开桥
+
+2026-11-07 联网核实了「原神 / 绝区零 / 终末地都能识别 REDMI 手柄」的社区说法。**结论：对这三款游戏，本项目的桥很可能不需要，甚至有害；桥的价值仍然只在星穹铁道这类按设备名白名单的游戏上。**
+
+### 8.1 REDMI 手柄有两种模式，社区说法混了两者
+
+小米官方上手视频的设置页截图明确了两个模式：
+
+- **映射模式**：「手柄按键模拟触屏功能，开启后可自定义按键坐标，**适用于所有游戏**」——本质是模拟点击，游戏并没有识别到手柄。部分评测里的「原神能玩」走的是这条路（游戏侧边栏工具箱 →「手柄按键」）。
+- **原生模式**：「开启后可直接操控游戏，**适用于本身支持手柄的游戏**」——这才是真正的原生手柄输入。
+
+REDMI 手柄仅蓝牙连接（官方视频未见 USB 接口），恰好满足原神「必须蓝牙」的要求。
+
+### 8.2 三款游戏的判定方式与星铁不同
+
+| 游戏 | 判定方式 | 依据 | REDMI 手柄原生模式 |
+| --- | --- | --- | --- |
+| 绝区零 | **通用检测**：设置 → 输入 → UI 布局 → 控制器 | Android Authority「any controller commonly used for mobile gaming should be compatible」；IT之家 2024 实测连手柄才出现手柄 UI 选项 | 大概率直接可用 |
+| 明日方舟：终末地 | **通用检测**：登录界面「任意手柄操作」自动切手柄 UI | 鹰角官方 FAQ（endfield.hypergryph.com/news/8563）；支持范围虽列 PS/Xbox，但措辞是「其他品牌**可能存在部分兼容性问题**」而非拒绝；同类项目已实测用虚拟 Xbox360 让 iPega 手柄开启原生模式 | 大概率直接可用 |
+| 原神 | **按 VID:PID / 已知型号**，安卓仅蓝牙 | HoYoverse 官方支持页仍只列 DualSense / DS4 / Xbox Wireless / Xbox Elite 2，并写明「不在列表即不获官方支持」；但 233乐园 2026-07 实测明确写「**原神：原生模式直连**」，另有第三方手柄原生识别的社区反馈 | 很可能可用，但非官方保证 |
+| 崩坏：星穹铁道 | **InControl 设备名字符串白名单** | 本项目真机验证 | ❌ 仍需桥 |
+
+**为什么同一个手柄结果不同**：REDMI 手柄在原生 / PC-Xbox 模式下上报 `045e:0b13`，而这个 VID:PID 正是 **Xbox Series X|S / Xbox One 蓝牙控制器**的标准 ID（SDL_GameControllerDB、OpenEmu issue、ESP32 HID 描述符均可查到），原神若按 VID:PID 判定就会当成「Xbox Wireless Controller」命中白名单；但星铁按 `Input.GetJoystickNames()` 的字符串匹配，REDMI 上报的是 `REDMI Gaming Controller`，不匹配。**本项目存在的理由正是这个差异。**
+
+### 8.3 修正后的验证顺序（先不开桥）
+
+1. 手柄切到 **原生模式**，关闭小米游戏中心的「手柄按键 / 映射」浮层。
+2. **停止本项目的桥**（App 里点停止）。开桥会 `EVIOCGRAB` 独占物理手柄并额外创建一个虚拟手柄，系统里同时出现两个手柄，反而容易造成双重输入或游戏选错设备。
+3. 完全退出游戏后重进，看**设置里是否出现「控制类型 → 手柄」/「UI 布局 → 控制器」，按键提示是否变成 A/B/X/Y 图标**。出现 = 真·原生识别；只是按键有反应但 UI 仍是触屏 = 映射模式，不算识别。
+4. 三款都不认时，才回到 0.3.0 的身份预设：依次试 `xboxbt`（`045e:0b13` / `BUS_BLUETOOTH`）、`ds4`、`dualsense`，每次重启桥并完全重进游戏。
+5. 换 VID:PID 后需核对设备上 `/system/usr/keylayout/Vendor_<vid>_Product_<pid>.kl` 的轴/键规则（`8bitdo-xbox-bridge` 踩过 `045e:02fd` 把 View 键映射成 `KEY_BACK` 的坑）。若游戏还查 `BluetoothAdapter` 配对列表或 `InputDevice.getDescriptor()`，则要走 `/system/bin/hid` + UHID 描述符（参考 `kishi-controller-bridge` 的 `XboxProfile.REGISTRATION`），这仍是未实现的下一阶段。
+
+> 《鸣潮》官方 1.4 / 3.5 公告同样只列「无线连接的 Xbox 系列 / DS4 / DualSense / DualSense Edge」，尚未找到 REDMI 手柄的实测反馈，第 4 步的身份预设主要留给它和未来白名单变动。
+>
+> 风险：米哈游 / 库洛 / 鹰角的用户协议对「模拟用户操作 / 改变操作环境 / 伪造设备信息」有限制。本项目只做设备层兼容，不做宏、连点或自动化；实验性身份请自行评估账号风险。
 
 ## 相关文档
 

@@ -25,7 +25,7 @@ flowchart LR
 
 | 模块 | 职责 |
 | --- | --- |
-| 发现 | 扫描 `/dev/input/event*`，按 `EVIOCGNAME` / `EVIOCGID` / `EVIOCGBIT` 判定手柄，排除触屏、传感器与自身虚拟设备；支持热插拔重连 |
+| 发现 | 扫描 event0–127，按 `EVIOCGNAME` / `EVIOCGID` / `EVIOCGBIT` 判定手柄，支持纯数字按键设备；通过 sysfs 排除自身 virtual input，保留同名真实物理手柄；支持热插拔重连 |
 | Profile | 内置 `auto/redmi/xbox/ps/android/switch/generic`，按设备名 / VID:PID 或轴布局自动选择；`--config` 加载自定义按键 / 轴映射 |
 | 缩放 | 读取物理轴 `EVIOCGABS` 的 min/max，把值线性映射到虚拟 Xbox360 轴范围（摇杆 16 位、扳机 0–255 等） |
 | 转发 | `EVIOCGRAB` 独占物理设备防双重输入；创建 uinput 设备并逐事件 `write()`；断开自动重连、虚拟设备常驻不掉线 |
@@ -33,11 +33,11 @@ flowchart LR
 | 单例 | pid 文件 + flock 保证同一前缀仅一个实例；`--stop` 按 pid 文件终止 |
 | 状态 | 将运行状态写为 JSON 文件（见 [USAGE.md](USAGE.md)）供 App 读取；`--prefix` 指定 pid / log / status 文件前缀 |
 
-命令行入口：`--list` 枚举、`--device` 指定设备、`--profile` 选 Profile、`--config` 自定义映射、`--prefix` 文件前缀、`--no-grab` 不独占、`--detach` 脱离常驻、`--stop` 停止、`--help` 帮助。完整说明见 [USAGE.md](USAGE.md)。
+命令行入口：`--list` 枚举、`--device` 按 event 路径或 VID:PID 指定设备、`--profile` 选 Profile、`--config` 自定义映射、`--prefix` 文件前缀、`--no-grab` 不独占、`--detach` 脱离常驻、`--stop` 停止、`--help` 帮助。完整说明见 [USAGE.md](USAGE.md)。
 
 ## 3. App 层（com.controllerstar.x360bridge）
 
-- **UI（纯 Java，无 AndroidX）**：状态卡片四路灯（Shizuku / 桥进程 / 物理手柄 / 虚拟设备）、一键启停主开关、已发现手柄列表与选择、Profile 选择、开机自启与独占开关、可折叠日志。
+- **UI（纯 Java，无 AndroidX）**：按 Shizuku → 物理手柄 → 桥进程排序的三步状态卡，主按钮随进度切换；Shizuku 弹窗提供安装、启动、授权与重查；设备列表显示连接方式、VID:PID、建议 Profile 和扳机类型，高级映射与自启设置保持可选。
 - **Shizuku UserService + AIDL**：以 shell 身份执行 native 命令、读取状态 JSON、传递启停与参数。
 - **二进制选择**：按 `Build.SUPPORTED_ABIS` 从 `assets/bin/<abi>/uinput_x360` 释放对应架构的静态程序。
 - **BOOT_COMPLETED 接收者 + 短暂前台服务**：开机后轮询重试拉起桥，受第 4 节边界约束。
@@ -50,11 +50,28 @@ flowchart LR
 - 权限仅用于：枚举输入设备、打开 `/dev/uinput`、创建虚拟设备、`EVIOCGRAB`；不申请网络权限、不收集数据。
 - GKD 依赖无障碍服务，无法创建 `/dev/uinput`；Dhizuku 的 Device Owner 不提供任意 shell 执行。二者均不适用。
 
-## 5. 为什么虚拟设备必须伪装成 045e:028e
+## 5. 身份预设与轴绑定
 
-星穹铁道的 InControl 按设备名 / VID:PID 白名单匹配 profile，命中项形如 `Microsoft X-Box 360 pad` / `Xbox Wireless Controller`（`045e:028e`）。REDMI 手柄（`045e:0b13` 一类）虽是合法输入设备，但不在白名单中。
+### 5.1 为什么默认伪装成 045e:028e
 
-虚拟设备须同时满足：`BUS_USB` + vendor `0x045e` + product `0x028e` + version `0x0110` + 名称 `Microsoft X-Box 360 pad` + 标准 Xbox360 按键 / 轴布局，才会被白名单与 InControl 的 Xbox360 profile 同时接受。改蓝牙别名不改变输入设备上报的名称与 ID，因此无效。这也是无法靠 GKD / 无障碍浮层绕过的根本原因——必须先有一个被内核承认的 uinput 设备。
+星穹铁道的 InControl 按设备名 / VID:PID 白名单匹配 profile，命中项形如 `Microsoft X-Box 360 pad`。虚拟设备须同时满足 `BUS_USB` + vendor `0x045e` + product `0x028e` + version `0x0110` + 名称 `Microsoft X-Box 360 pad` + 标准 Xbox360 按键 / 轴布局，才会被白名单与 InControl 的 Xbox360 profile 同时接受。改蓝牙别名不改变输入设备上报的名称与 ID，因此无效。这也是无法靠 GKD / 无障碍浮层绕过的根本原因——必须先有一个被内核承认的 uinput 设备。
+
+0.3.0 起这组身份不再是编译期常量，而是运行时的 `IDENTITIES[]` 预设表：`xbox360`（默认）、`xboxone`、`xboxbt`、`ds4`、`dualsense`，由 `--identity` 选择。`create_virtual_device()`、`looks_like_gamepad()`（排除自身）与 `write_status()` 全部读取当前选中的预设；切换身份后不会再把自己当物理手柄 `EVIOCGRAB`。非默认身份为实验性，详见 [兼容性说明](COMPATIBILITY.md) 第 8 节。
+
+### 5.2 一个虚拟轴只接一个物理源
+
+0.2.x 用「Profile 轴表」做 `from → to` 映射，同一 `to` 可能被多个 `from` 写入，且 `GAS` / `BRAKE` 左右写反，这是 LT/RT 错位的根源。0.3.0 在 `open_physical()` 时按实际 `EV_ABS` / `EV_KEY` 能力与 `EVIOCGABS` 量程构造 `bind[ROLE_COUNT]`：
+
+```
+物理 event 轴 ──► role_for_src() ──► 唯一角色 ──► emit_axis_value()
+                                        │
+                                        ├─ 扳机：静止归一 / 自适应量程 / 自动二值
+                                        ├─ 摇杆：按 lo..hi 线性缩放到虚拟轴
+                                        └─ HAT：原样钳制到 -1..1
+未绑定的轴直接丢弃（不再 passthrough 猜测）
+```
+
+`--config` 的 `axis` 规则可覆盖任意角色绑定；`--legacy-mapping` 可回退旧轴表。按键式扳机 `BTN_TL2` / `BTN_TR2` 在没有对应轴时转成 `ABS_Z` / `ABS_RZ`；按钮式十字键对所有 Profile 都转成 `ABS_HAT0X/Y`。启动日志会打印完整绑定表，是排查错位的第一入口。
 
 ## 6. 常驻与开机自启时序
 
